@@ -290,13 +290,14 @@ mcporter call dingtalk-ai-table create_base baseName='销售日报'
 - `filters` 条件查
 - `keyword` 全文查
 - `sort` 排序
-- `cursor`：仅用于普通浏览；不要与 `filters` / `sort` 组合做稳定批量遍历
+- `cursor`：无 `filters`、无 `sort` 时可用于普通读取 / 导出 / 统计 / 低风险遍历；只要用了 `filters` 或 `sort`，就不要依赖 `cursor` 连续翻页做稳定批量遍历
 - `fieldIds` 限定返回字段
 
 **查询执行硬规则：**
 
-- 使用 `filters` / `sort` 时，不要依赖 `cursor` 连续翻页
-- 批量处理只走“第一页 -> 处理记录 -> 回写辅助标记字段 -> 下次继续查未标记数据”
+- 无 `filters`、无 `sort` 的普通连续读取，可以使用 `cursor`
+- 只要使用了 `filters` 或 `sort`，就不要依赖 `cursor` 连续翻页做稳定批量遍历
+- 涉及 `filters` 或 `sort` 的批量处理，只走“第一页 -> 处理记录 -> 回写辅助标记字段 -> 下次继续查未标记数据”
 - 辅助字段只用于避免重复读取和模拟稳定分页，不承载业务含义
 - 如果没有辅助字段，可以新增 `AI处理标记`、`查询标记`、`同步标记` 或 `回查标记` 之一
 
@@ -309,7 +310,7 @@ mcporter call dingtalk-ai-table create_base baseName='销售日报'
 - `sort`（可选）
 - `fieldIds`（可选）
 - `limit`（默认 100，最大 100）
-- `cursor`（可选）：仅用于普通浏览；不要与 `filters` / `sort` 组合做稳定批量遍历
+- `cursor`（可选）：无 `filters`、无 `sort` 时可用于普通读取 / 导出 / 统计 / 低风险遍历；只要用了 `filters` 或 `sort`，就不要依赖它做稳定批量遍历
 
 ### filters 说明
 
@@ -331,7 +332,7 @@ mcporter call dingtalk-ai-table create_base baseName='销售日报'
 - `singleSelect / multipleSelect` 做过滤时，**必须传 option id，不是 option name**
 - option id 需先通过 `get_fields` 获取
 - `filters` 中使用的是 `fieldId`，不是字段名
-- 在 `filters` / `sort` 场景不要依赖 `cursor` 连续翻页
+- 在 `filters` / `sort` 场景不要依赖 `cursor` 连续翻页；普通读取时可以使用 `cursor`
 - 不等于请使用 `ne`，不要写成 `neq`；如果操作符不确定，以服务端报错里列出的支持列表为准
 
 ## 3.17 create_records

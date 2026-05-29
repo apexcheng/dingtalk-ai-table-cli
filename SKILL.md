@@ -73,7 +73,22 @@ mcporter call dingtalk-ai-table list_bases limit=5
 
 ## 必须遵守的查询规则
 
-### 1. 服务端查询限制
+### 1. cursor 使用边界
+
+`query_records` 里，`cursor` 不是永远不能用。
+
+| 查询场景 | 是否可以用 cursor 连续翻页 | 推荐方式 |
+| --- | ---: | --- |
+| 无 filters、无 sort，普通读取 | 可以 | cursor 连续读取 |
+| 有 filters，无 sort | 不要依赖 cursor | 第一页 -> 处理 -> 回写回查标记 -> 查未标记 |
+| 无 filters，有 sort | 不要依赖 cursor | 第一页 -> 处理 -> 回写回查标记 -> 查未标记 |
+| 有 filters、有 sort | 不要依赖 cursor | 第一页 -> 处理 -> 回写回查标记 -> 查未标记 |
+
+无 `filters`、无 `sort` 的普通连续读取可以使用 `cursor`，适合普通读取、导出、统计或低风险遍历，只要不依赖排序语义，也不要求复杂过滤后的稳定分页。
+
+### 2. 服务端查询限制
+
+只要使用了 `filters` 或 `sort` 任意一种，就不要依赖 `cursor` 连续翻页完成稳定批量处理。
 
 `query_records` 的服务端语义不保证以下方式可用于稳定批量遍历：
 
@@ -88,24 +103,16 @@ mcporter call dingtalk-ai-table list_bases limit=5
 - 顺序不稳定
 - 批量处理结果不可控
 
-因此，Agent 禁止依赖这些方式做大表全量处理。
+### 3. 回查标记与批量处理
 
-### 2. 批量处理唯一推荐方式
-
-批量处理只能按这个流程推进：
+涉及 `filters` 或 `sort` 的批量处理，必须使用回查标记方式推进：
 
 1. 查询第一页
 2. 处理当前返回记录
 3. 回写辅助标记字段
 4. 下一轮继续查询未标记记录
 
-不要把 `cursor` 当成数据库分页游标使用。
-
-### 3. 辅助标记字段
-
-批量处理必须通过辅助标记字段避免重复读取。
-
-如果表里没有可用辅助字段，Agent 可以自动新增。可用字段名示例：
+辅助标记字段必须用于避免重复读取和模拟稳定分页。Agent 可以自动新增，示例字段名：
 
 - `处理标记`
 - `查询标记`
@@ -287,4 +294,3 @@ python3 import_records.py <baseId> <tableId> data.json 50
 - API 参考：`references/api-reference.md`
 - 错误排查：`references/error-codes.md`
 - 快速开始补充：`docs/getting-started.md`
-
