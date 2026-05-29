@@ -214,6 +214,8 @@ mcporter call dingtalk-ai-table list_bases limit=5
 
 唯一推荐格式：
 
+普通字段使用 `eq`，例如文本 / 单选 / 状态类字段：
+
 ```json
 {
   "baseId": "base_xxx",
@@ -224,14 +226,41 @@ mcporter call dingtalk-ai-table list_bases limit=5
     "operands": [
       {
         "operator": "eq",
-        "operands": ["fld_xxx", "2026-05-28"]
+        "operands": ["fld_status", "进行中"]
+      },
+      {
+        "operator": "eq",
+        "operands": ["fld_shop", "bow航世专卖店"]
       }
     ]
   }
 }
 ```
 
-其中 `fld_xxx` 是字段 ID，不是字段名称。
+时间 / 日期字段使用 `date_eq`，例如：
+
+```json
+{
+  "baseId": "base_xxx",
+  "tableId": "tbl_xxx",
+  "limit": 100,
+  "filters": {
+    "operator": "and",
+    "operands": [
+      {
+        "operator": "date_eq",
+        "operands": ["fld_review_time", "2026-05-28"]
+      },
+      {
+        "operator": "date_eq",
+        "operands": ["fld_collect_date", "2026-05-29"]
+      }
+    ]
+  }
+}
+```
+
+其中 `fld_status`、`fld_shop`、`fld_review_time`、`fld_collect_date` 都是字段 ID，不是字段名称。
 
 正确流程是：
 
