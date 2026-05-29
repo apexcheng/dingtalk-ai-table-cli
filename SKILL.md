@@ -85,7 +85,7 @@ mcporter call dingtalk-ai-table list_bases limit=5
 
 `query_records` 里，`cursor` 不是永远不能用。
 
-| 查询场景 | 是否可以用 cursor 连续翻页 | 推荐方式 |
+| 查询场景 | 是否可以用 cursor 连续翻页 | 严格要求 |
 | --- | ---: | --- |
 | 无 filters、无 sort，普通读取 | 可以 | cursor 连续读取 |
 | 有 filters，无 sort | 禁止 | 第一页 -> 处理 -> 回写“查询标记” -> 查未标记 |
