@@ -1,6 +1,6 @@
 ---
 name: dingtalk-ai-table
-description: 钉钉 AI 表格（多维表）操作技能。使用 mcporter CLI 连接钉钉官方新版 AI 表格 MCP server，基于 baseId / tableId / fieldId / recordId 体系执行 Base、Table、Field、Record 的查询与增删改。适用于创建 AI 表格、搜索表格、读取表结构、批量增删改记录、批量建字段、更新字段配置、按模板建表等场景。默认使用当前 agent workspace 的 mcporter 注册名 dingtalk-ai-table，DINGTALK_MCP_URL 仅作为可选直连兜底。
+  description: 钉钉 AI 表格（多维表）操作技能。使用 mcporter CLI 连接钉钉官方新版 AI 表格 MCP server，基于 baseId / tableId / fieldId / recordId 体系执行 Base、Table、Field、Record 的查询与增删改。适用于创建 AI 表格、搜索表格、读取表结构、批量增删改记录、批量建字段、更新字段配置、按模板建表等场景。默认使用当前 agent workspace 的 mcporter 注册名 dingtalk-ai-table，`DINGTALK_AI_TABLE_DIRECT_URL` 仅作为可选直连兜底。
 version: 0.6.0
 metadata:
   author: Marila@Dingtalk
@@ -83,7 +83,7 @@ python3 import_records.py base_xxx tbl_xxx data.csv
 ## 配置说明
 
 - 默认使用当前 agent workspace 里的 `mcporter` 注册名 `dingtalk-ai-table`。
-- `DINGTALK_MCP_URL` 只是可选直连兜底。
+- 如果需要直连兜底，请使用可选变量 `DINGTALK_AI_TABLE_DIRECT_URL`。
 - 安装、注册、`OPENCLAW_WORKSPACE` 和直连示例见 [docs/getting-started.md](docs/getting-started.md)。
 
 ## 核心工具集

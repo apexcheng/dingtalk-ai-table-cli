@@ -4,7 +4,7 @@
 
 - 安装 `mcporter >= 0.8.1`：`npm install -g mcporter`
 - 确认当前 agent workspace 的 `config/mcporter.json` 已注册 `dingtalk-ai-table`
-- 可选：如果要直连 MCP Server，再设置 `DINGTALK_MCP_URL`
+- 可选：如果要直连 MCP Server，再设置 `DINGTALK_AI_TABLE_DIRECT_URL`
 - 可选：设置 `OPENCLAW_WORKSPACE` 用于脚本文件沙箱
 
 验证：
@@ -88,6 +88,38 @@ python3 import_records.py base_xxx tbl_xxx data.csv
 - 更低版本需要显式加 `--output text`
 - AI 表格 MCP 无论使用哪种模式，返回体本身都是标准 JSON；差异主要在 `mcporter` 的输出处理方式
 
+## 示例数据文件
+
+### fields.json - 批量新增字段示例
+
+```json
+[
+  {"fieldName":"任务名","type":"text"},
+  {"fieldName":"优先级","type":"singleSelect","config":{"options":[{"name":"高"},{"name":"中"},{"name":"低"}]}},
+  {"fieldName":"截止日期","type":"date"},
+  {"fieldName":"负责人","type":"user","config":{"multiple":false}},
+  {"fieldName":"进度","type":"progress"}
+]
+```
+
+### data.csv - 批量导入记录示例
+
+```csv
+fld_name,fld_age,fld_status,fld_salary
+张三,25,进行中,15000
+李四,30,已完成,18000
+王五,28,进行中,16000
+```
+
+### data.json - JSON 格式导入示例
+
+```json
+[
+  {"cells":{"fld_name":"张三","fld_age":25,"fld_status":"进行中","fld_salary":15000}},
+  {"cells":{"fld_name":"李四","fld_age":30,"fld_status":"已完成","fld_salary":18000}}
+]
+```
+
 ## 下一步
 
 - 详细 API 参考：`references/api-reference.md`
@@ -100,6 +132,6 @@ python3 import_records.py base_xxx tbl_xxx data.csv
 如果当前环境没有注册 `dingtalk-ai-table`，可以改用直连 URL：
 
 ```bash
-export DINGTALK_MCP_URL='<your-url>'
-mcporter call "$DINGTALK_MCP_URL" .list_bases limit=10
+export DINGTALK_AI_TABLE_DIRECT_URL='<your-url>'
+mcporter call "$DINGTALK_AI_TABLE_DIRECT_URL" .list_bases limit=10
 ```

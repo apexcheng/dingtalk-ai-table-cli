@@ -91,12 +91,12 @@ def get_mcporter_version() -> Optional[Tuple[int, int, int]]:
 
 
 def build_mcporter_call(args: List[str]) -> List[str]:
-    mcp_url = os.environ.get('DINGTALK_MCP_URL')
-    if mcp_url:
+    direct_url = os.environ.get('DINGTALK_AI_TABLE_DIRECT_URL')
+    if direct_url:
         tool_name = args[0]
         if not tool_name.startswith('.'):
             tool_name = f'.{tool_name}'
-        cmd = ['mcporter', 'call', mcp_url]
+        cmd = ['mcporter', 'call', direct_url]
         args = [tool_name] + args[1:]
     else:
         cmd = ['mcporter', 'call', 'dingtalk-ai-table']

@@ -10,8 +10,8 @@ if [ -z "$BASE_ID" ] || [ -z "$TABLE_ID" ]; then
 fi
 
 echo "🔍 查询记录..."
-if [ -n "${DINGTALK_MCP_URL:-}" ]; then
-  mcporter call "$DINGTALK_MCP_URL" .query_records \
+if [ -n "${DINGTALK_AI_TABLE_DIRECT_URL:-}" ]; then
+  mcporter call "$DINGTALK_AI_TABLE_DIRECT_URL" .query_records \
     --args "{\"baseId\":\"$BASE_ID\",\"tableId\":\"$TABLE_ID\",\"limit\":10}"
 else
   mcporter call dingtalk-ai-table query_records \

@@ -3,7 +3,8 @@
 本项目最初参考 / fork 自 [aliramw/dingtalk-ai-table](https://github.com/aliramw/dingtalk-ai-table)。
 后续按当前仓库结构独立维护，不自动同步上游结构。
 本项目默认面向 OpenClaw 多 agent + per-agent `mcporter.json` 场景，默认调用当前 agent workspace 中注册的 `dingtalk-ai-table`。
-`DINGTALK_MCP_URL` 仅作为可选直连方式，不是默认方式。
+`dingtalk-ai-table` 是当前 agent workspace 里的 `mcporter.json` 注册名。
+不推荐依赖全局旧变量；如果确实需要直连兜底，请使用可选变量 `DINGTALK_AI_TABLE_DIRECT_URL`。
 本项目不是官方项目。
 
 ## 查询限制与推荐策略

@@ -10,8 +10,8 @@ if [ -z "$BASE_ID" ] || [ -z "$TABLE_ID" ]; then
 fi
 
 echo "➕ 新增记录..."
-if [ -n "${DINGTALK_MCP_URL:-}" ]; then
-  mcporter call "$DINGTALK_MCP_URL" .create_records \
+if [ -n "${DINGTALK_AI_TABLE_DIRECT_URL:-}" ]; then
+  mcporter call "$DINGTALK_AI_TABLE_DIRECT_URL" .create_records \
     --args "{
       \"baseId\":\"$BASE_ID\",
       \"tableId\":\"$TABLE_ID\",

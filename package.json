@@ -36,7 +36,7 @@
     ],
     "credentials": [
       {
-        "name": "DINGTALK_MCP_URL",
+        "name": "DINGTALK_AI_TABLE_DIRECT_URL",
         "description": "可选兜底：如果未使用当前 agent workspace/config/mcporter.json 中注册的 dingtalk-ai-table，可直接指定 MCP Server URL（含访问令牌）",
         "docs": "https://mcp.dingtalk.com/#/detail?mcpId=9555",
         "storageMethod": "optional environment variable"

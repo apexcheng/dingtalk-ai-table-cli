@@ -9,8 +9,8 @@ if [ -z "$BASE_ID" ]; then
 fi
 
 echo "📊 查看 Base 内的表..."
-if [ -n "${DINGTALK_MCP_URL:-}" ]; then
-  mcporter call "$DINGTALK_MCP_URL" .get_base baseId="$BASE_ID"
+if [ -n "${DINGTALK_AI_TABLE_DIRECT_URL:-}" ]; then
+  mcporter call "$DINGTALK_AI_TABLE_DIRECT_URL" .get_base baseId="$BASE_ID"
 else
   mcporter call dingtalk-ai-table get_base baseId="$BASE_ID"
 fi
