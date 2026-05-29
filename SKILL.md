@@ -244,14 +244,15 @@ mcporter call dingtalk-ai-table list_bases limit=5
 - 不要猜 operator
 - 不要因为常见数据库 API 有 `gte` / `lte`，就直接使用
 - 只有在当前 schema、工具说明、服务端错误提示或项目代码里明确支持时，才能使用对应 operator
-- 当前仓库内已确认的 `filters` operator 证据只有 `eq` 和 `ne`
+- 当前仓库内已确认的 `filters` operator 证据包括 `eq`、`ne` 和 `date_eq`
 - 日期过滤禁止使用区间条件；不要生成 `greater_equal` + `less_than`，也不要生成 `is_after` / `is_before` 这类区间比较思路
+- 普通字段（文本 / 单选 / 状态等）使用 `eq`
+- 时间 / 日期字段使用 `date_eq`
 - 当前仓库里没有找到 `greater_equal`、`less_than`、`is_after`、`is_before` 的真实支持证据时，不要把它们写成确定可用
-- 如果不确定 operator 是否支持，优先使用已确认的 `eq`
 - 日期范围查询不要直接猜 `gte` / `lte`
-- 日期范围查询唯一推荐方案是按天拆成多次服务端 `eq` 查询，不要默认切成“全量查询 -> 本地筛选”
+- 日期范围查询唯一推荐方案是按天拆成多次服务端 `date_eq` 查询，不要默认切成“全量查询 -> 本地筛选”
 
-这是经过当前工具真实支持能力确认后的推荐写法：基于仓库内目前可确认的 `eq` / `ne` 能力，日期范围查询优先按天拆成多次服务端 `eq` 查询。
+这是经过当前工具真实支持能力确认后的推荐写法：基于仓库内目前可确认的 `eq`、`ne`、`date_eq` 能力，日期范围查询优先按天拆成多次服务端 `date_eq` 查询。
 
 日期过滤值只传 `yyyy-mm-dd`，不要传完整时间；表格中即使存的是 `yyyy-mm-dd HH:MM:SS`，使用 `yyyy-mm-dd` 也用于匹配当天数据。
 
@@ -266,7 +267,7 @@ mcporter call dingtalk-ai-table list_bases limit=5
     "operator": "and",
     "operands": [
       {
-        "operator": "eq",
+        "operator": "date_eq",
         "operands": ["日期字段ID", "2026-05-27"]
       }
     ]
@@ -283,7 +284,7 @@ mcporter call dingtalk-ai-table list_bases limit=5
     "operator": "and",
     "operands": [
       {
-        "operator": "eq",
+        "operator": "date_eq",
         "operands": ["日期字段ID", "2026-05-28"]
       }
     ]
@@ -341,7 +342,7 @@ mcporter call dingtalk-ai-table list_bases limit=5
 
 应优先使用服务端过滤条件：
 
-- 日期范围优先用服务端日期过滤；如果当前环境未确认范围 operator，则按当前已确认能力拆成多次服务端 `eq`
+- 日期范围优先用服务端日期过滤；按天循环时使用 `date_eq`
 - 日期范围查询改成按天循环过滤；例如查询 `2025-05-01 ~ 2025-05-05`，应依次过滤 `2025-05-01`、`2025-05-02`、`2025-05-03`、`2025-05-04`、`2025-05-05`
 - 状态字段优先用服务端过滤
 - 订单号、主播、店铺、型号等条件优先用服务端过滤
@@ -446,7 +447,7 @@ mcporter call dingtalk-ai-table list_bases limit=5
 7. 如果表里没有 `查询标记` 字段，Agent 可以先用 `create_fields` 创建，字段类型优先 `text`。
 8. 只查询 / 只导出 / 只统计等任务，如果需要在 `filters` 或 `sort` 条件下稳定处理超过 `100` 条数据，也可以回写 `查询标记`；这属于技术性分页，不等同于修改业务数据。
 9. 日期过滤只传 `yyyy-mm-dd`，不要传完整时间，也不要构造左闭右开区间。
-10. 日期范围查询一律按天拆成多次服务端 `eq` 查询，不要生成区间条件，不要猜 `greater_equal` / `less_than` / `is_after` / `is_before`。
+10. 日期范围查询一律按天拆成多次服务端 `date_eq` 查询，不要生成区间条件，不要猜 `greater_equal` / `less_than` / `is_after` / `is_before`。
 11. 单日查询达到 `100` 条时，必须在当天范围内使用“查询标记”循环分页，不能使用 `cursor`。
 12. 用户未明确要求图片 / 附件字段时，默认排除图片 / 附件字段。
 13. 附件先 `prepare_attachment_upload`，再上传文件，最后写 `fileToken`。
@@ -509,7 +510,7 @@ python3 import_records.py <baseId> <tableId> data.json 50
 - `查询标记` 固定使用唯一值格式 `task_YYYYMMDD_HHMMSS_任务说明`
 - 只查询 / 只导出 / 只统计任务不等于绝对只读；为了稳定分页，仍可回写 `查询标记`，除非用户明确禁止任何辅助字段写入
 - `filters` 必须使用对象结构和 `fieldId`；禁止使用 `filterType`、数组 `filters`、`fieldName` 过滤和未确认支持的 `gte` / `lte`
-- 日期过滤禁止使用区间条件；只传 `yyyy-mm-dd`，按天拆成多次服务端 `eq` 查询；单日达到 `100` 条时在当天范围内用“查询标记”循环分页，不能使用 `cursor`
+- 日期过滤禁止使用区间条件；只传 `yyyy-mm-dd`，按天拆成多次服务端 `date_eq` 查询；单日达到 `100` 条时在当天范围内用“查询标记”循环分页，不能使用 `cursor`
 - 用户没有要求图片时，默认排除图片 / 附件字段
 - 复杂参数一律用 `--args` JSON
 - `singleSelect / multipleSelect` 过滤时必须传 option ID，不是 option name
