@@ -4,8 +4,8 @@
 BASE_NAME="${1:-我的项目}"
 
 echo "🆕 创建 Base: $BASE_NAME"
-if [ -n "${DINGTALK_MCP_URL:-}" ]; then
-  mcporter call "$DINGTALK_MCP_URL" .create_base baseName="$BASE_NAME"
+if [ -n "${DINGTALK_AI_TABLE_DIRECT_URL:-}" ]; then
+  mcporter call "$DINGTALK_AI_TABLE_DIRECT_URL" .create_base baseName="$BASE_NAME"
 else
   mcporter call dingtalk-ai-table create_base baseName="$BASE_NAME"
 fi

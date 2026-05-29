@@ -1,6 +1,6 @@
 {
   "name": "dingtalk-ai-table",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "钉钉 AI 表格（多维表）操作技能。基于新版 MCP tools，使用 baseId / tableId / fieldId / recordId 体系执行 Base、Table、Field、Record 管理。脚本文件 I/O 限制在工作区内。",
   "keywords": [
     "dingtalk",
@@ -15,7 +15,7 @@
     "Marila@Dingtalk"
   ],
   "license": "MIT",
-  "homepage": "https://clawhub.com/skills/dingtalk-ai-table",
+  "homepage": "https://github.com/apexcheng/dingtalk-ai-table",
   "repository": {
     "type": "git",
     "url": "https://github.com/apexcheng/dingtalk-ai-table.git"
@@ -36,7 +36,7 @@
     ],
     "credentials": [
       {
-        "name": "DINGTALK_MCP_URL",
+        "name": "DINGTALK_AI_TABLE_DIRECT_URL",
         "description": "可选兜底：如果未使用当前 agent workspace/config/mcporter.json 中注册的 dingtalk-ai-table，可直接指定 MCP Server URL（含访问令牌）",
         "docs": "https://mcp.dingtalk.com/#/detail?mcpId=9555",
         "storageMethod": "optional environment variable"
