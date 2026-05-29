@@ -73,28 +73,40 @@ mcporter call dingtalk-ai-table list_bases limit=5
 
 ## 必须遵守的查询规则
 
-### 1. cursor 使用边界
+### 1. `query_records` limit 规则
+
+`query_records` 单次 `limit` 最大只能是 `100`。
+
+- 默认 `limit` 应使用 `100`
+- 只有在用户明确要求更小数量时，才使用更小的 `limit`
+- 禁止尝试 `limit=200` 或任何大于 `100` 的值
+
+### 2. cursor 使用边界
 
 `query_records` 里，`cursor` 不是永远不能用。
 
 | 查询场景 | 是否可以用 cursor 连续翻页 | 推荐方式 |
 | --- | ---: | --- |
 | 无 filters、无 sort，普通读取 | 可以 | cursor 连续读取 |
-| 有 filters，无 sort | 不要依赖 cursor | 第一页 -> 处理 -> 回写回查标记 -> 查未标记 |
-| 无 filters，有 sort | 不要依赖 cursor | 第一页 -> 处理 -> 回写回查标记 -> 查未标记 |
-| 有 filters、有 sort | 不要依赖 cursor | 第一页 -> 处理 -> 回写回查标记 -> 查未标记 |
+| 有 filters，无 sort | 禁止 | 第一页 -> 处理 -> 回写“查询标记” -> 查未标记 |
+| 无 filters，有 sort | 禁止 | 第一页 -> 处理 -> 回写“查询标记” -> 查未标记 |
+| 有 filters、有 sort | 禁止 | 第一页 -> 处理 -> 回写“查询标记” -> 查未标记 |
 
 无 `filters`、无 `sort` 的普通连续读取可以使用 `cursor`，适合普通读取、导出、统计或低风险遍历，只要不依赖排序语义，也不要求复杂过滤后的稳定分页。
 
-### 2. 服务端查询限制
+只要出现 `filters` 或 `sort` 任意一个，就禁止使用 `cursor` 作为连续翻页机制。
+
+即使 MCP 返回了 `cursor`，也不能继续拿这个 `cursor` 查询下一页，必须改用“查询标记”字段推进。
+
+### 3. 服务端查询限制
 
 只要使用了 `filters` 或 `sort` 任意一种，就不要依赖 `cursor` 连续翻页完成稳定批量处理。
 
 `query_records` 的服务端语义不保证以下方式可用于稳定批量遍历：
 
-- 排序 + 过滤 + cursor 连续翻页
-- 排序 + cursor 连续翻页
-- 过滤 + cursor 连续翻页
+- `filters + sort + cursor`
+- `sort + cursor`
+- `filters + cursor`
 
 这不是性能问题，而是服务端不保证稳定语义，可能导致：
 
@@ -103,26 +115,34 @@ mcporter call dingtalk-ai-table list_bases limit=5
 - 顺序不稳定
 - 批量处理结果不可控
 
-### 3. 回查标记与批量处理
+### 4. 回写“查询标记”与批量处理
 
-涉及 `filters` 或 `sort` 的批量处理，必须使用回查标记方式推进：
+涉及 `filters` 或 `sort` 的批量处理，必须使用“查询标记”方式推进：
 
 1. 查询第一页
 2. 处理当前返回记录
-3. 回写辅助标记字段
+3. 用 `update_records` 回写字段 `查询标记`
 4. 下一轮继续查询未标记记录
 
-辅助标记字段必须用于避免重复读取和模拟稳定分页。Agent 可以自动新增，示例字段名：
+辅助标记字段固定为 `查询标记`，不要改用其他同级替代名称，避免 Agent 自由发挥。
 
-- `处理标记`
-- `查询标记`
-- `同步标记`
-- `回查标记`
-- `AI处理标记`
+- 如果表里已有 `查询标记` 字段，直接使用
+- 如果没有 `查询标记` 字段，Agent 可以通过 `create_fields` 自动新增
+- 新增字段类型优先使用 `text`
+- 每批处理完成后，必须 `update_records` 回写 `查询标记`
+- 下一轮查询时，`filters` 里必须排除已标记记录，只查询 `查询标记` 为空或不等于本次任务标记的记录
 
-辅助字段只用于避免重复读取和模拟稳定分页，不应承载业务含义。
+历史表里可能已经存在 `处理标记`、`同步标记`、`回查标记`、`AI处理标记` 等旧字段；新任务统一使用 `查询标记`，不要再新增或推荐其他同级标记字段名。
 
-### 4. `filters` 字段规则
+`查询标记` 只用于避免重复读取和模拟稳定分页，不应承载业务含义。
+
+### 5. 返回 `100` 条后的处理规则
+
+在 `filters` 或 `sort` 场景下，如果本轮 `query_records` 返回数量大于等于 `100`，必须认为可能还有更多记录。
+
+下一批只能通过继续查询“`查询标记` 为空 / 不等于本次任务标记”的记录获取，禁止使用 `cursor` 获取下一页。
+
+### 6. `filters` 字段规则
 
 `filters` 必须使用 `fieldId`，不能直接使用字段名称，例如 `商品ID`、`日期`、`店铺`。
 
@@ -132,7 +152,7 @@ mcporter call dingtalk-ai-table list_bases limit=5
 2. 找到字段名称对应的 `fieldId`
 3. 用 `fieldId` 构造过滤条件
 
-### 5. 单选 / 多选过滤规则
+### 7. 单选 / 多选过滤规则
 
 `singleSelect` / `multipleSelect` 过滤必须使用 option id，不能直接传选项名称。
 
@@ -142,7 +162,7 @@ mcporter call dingtalk-ai-table list_bases limit=5
 2. 找到选项名称对应的 option id
 3. 用 option id 构造过滤条件
 
-### 6. 图片 / 附件字段默认不查
+### 8. 图片 / 附件字段默认不查
 
 查询记录时，默认只返回非图片 / 非附件字段。
 
@@ -158,11 +178,20 @@ mcporter call dingtalk-ai-table list_bases limit=5
 
 如果当前 MCP schema 不支持指定返回字段，则查询后只使用非图片 / 非附件字段，并在必要时提示图片 / 附件字段可能导致查询变慢。
 
-### 7. 日期过滤规则
+### 9. 日期过滤规则
 
 日期过滤优先按日期维度处理，不要依赖小时 / 分钟 / 秒级服务端过滤完成复杂批量任务。
 
 涉及复杂时间判断时，优先查询较小范围，再在 Agent 侧判断。
+
+按天切分必须使用左闭右开区间：`[当天 00:00:00, 次日 00:00:00)`。
+
+禁止把 `after` 和 `before` 设置成同一个时间点；例如 `after=2026-05-27 00:00:00` 且 `before=2026-05-27 00:00:00` 等价于空集。
+
+示例：
+
+- 正确：`after=2026-05-27 00:00:00`，`before=2026-05-28 00:00:00`
+- 错误：`after=2026-05-27 00:00:00`，`before=2026-05-27 00:00:00`
 
 ## 必须遵守的附件规则
 
@@ -233,9 +262,12 @@ mcporter call dingtalk-ai-table list_bases limit=5
 2. 再 `get_base` / `get_tables` 读取结构。
 3. 构造过滤条件前，必须先把字段名转换为 `fieldId`。
 4. `singleSelect / multipleSelect` 过滤时必须传 option id。
-5. 查询用 `query_records`：无 `filters`、无 `sort` 的普通大量读取可以使用 `cursor` 连续翻页；涉及 `filters` 或 `sort` 的批量处理，必须用“第一页 -> 处理 -> 回写辅助标记字段 -> 查未标记”。
-6. 用户未明确要求图片 / 附件字段时，默认排除图片 / 附件字段。
-7. 附件先 `prepare_attachment_upload`，再上传文件，最后写 `fileToken`。
+5. 查询用 `query_records`：单次 `limit` 最大 `100`，默认使用 `100`，除非用户明确要求更小数量。
+6. 无 `filters`、无 `sort` 的普通大量读取可以使用 `cursor` 连续翻页；只要涉及 `filters` 或 `sort`，就必须用“第一页 -> 处理 -> 回写 `查询标记` -> 查未标记”，即使 MCP 返回 `cursor` 也不能继续用它翻页。
+7. 如果表里没有 `查询标记` 字段，Agent 可以先用 `create_fields` 创建，字段类型优先 `text`。
+8. 按天过滤必须使用 `[当天 00:00:00, 次日 00:00:00)` 左闭右开区间，禁止把 `after` 和 `before` 设成同一个时间点。
+9. 用户未明确要求图片 / 附件字段时，默认排除图片 / 附件字段。
+10. 附件先 `prepare_attachment_upload`，再上传文件，最后写 `fileToken`。
 
 ## 脚本
 
@@ -276,6 +308,7 @@ python3 import_records.py <baseId> <tableId> data.json 50
 - 批量上限按 MCP server 实际限制控制：
   - `create_fields`：最多 15
   - `get_tables / get_fields`：最多 10
+  - `query_records`：单次最多 100
   - `create_records / update_records / delete_records`：最多 100
 
 ## 调试原则
@@ -283,9 +316,13 @@ python3 import_records.py <baseId> <tableId> data.json 50
 - 先 `get_base`，再 `get_tables`，必要时 `get_fields`
 - 不要猜 `fieldId`
 - 构造过滤条件前，必须先把字段名转换为 `fieldId`
-- 不要依赖排序 + 过滤 + 翻页、排序 + 翻页、过滤 + 翻页做全量遍历
+- `query_records` 默认 `limit=100`，禁止使用大于 `100` 的值
+- 不要依赖 `filters + sort + cursor`、`sort + cursor`、`filters + cursor` 做全量遍历
 - 无 `filters`、无 `sort` 的普通大量读取可以使用 `cursor`
-- 涉及 `filters` 或 `sort` 的批量处理，必须使用“第一页 + 处理 + 回写辅助标记字段 + 查未标记”的方式推进
+- 涉及 `filters` 或 `sort` 的批量处理，必须使用“第一页 + 处理 + 回写 `查询标记` + 查未标记”的方式推进
+- `filters` 或 `sort` 场景下，如果单轮返回大于等于 `100` 条，必须继续查询未标记记录，不能使用 `cursor` 取下一页
+- 若缺少 `查询标记` 字段，可先创建该字段，类型优先 `text`
+- 按天过滤必须使用 `[当天 00:00:00, 次日 00:00:00)`，不要把 `after` 和 `before` 设成同一个时间点
 - 用户没有要求图片时，默认排除图片 / 附件字段
 - 复杂参数一律用 `--args` JSON
 - `singleSelect / multipleSelect` 过滤时必须传 option ID，不是 option name
