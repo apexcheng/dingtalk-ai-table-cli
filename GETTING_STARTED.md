@@ -91,7 +91,7 @@ mcporter call "$DINGTALK_MCP_URL" .delete_records \
 
 运行：
 ```bash
-python3 scripts/bulk_add_fields.py base_xxx tbl_xxx fields.json
+python3 bulk_add_fields.py base_xxx tbl_xxx fields.json
 ```
 
 **批量导入记录**
@@ -105,7 +105,7 @@ fld_name,fld_age,fld_status
 
 运行：
 ```bash
-python3 scripts/import_records.py base_xxx tbl_xxx data.csv
+python3 import_records.py base_xxx tbl_xxx data.csv
 ```
 
 ## 常见问题

@@ -54,6 +54,6 @@
     ]
   },
   "scripts": {
-    "test": "python3 tests/test_security.py && python3 tests/test_triggering.py"
+    "test": "python3 test_security.py && python3 test_triggering.py"
   }
 }

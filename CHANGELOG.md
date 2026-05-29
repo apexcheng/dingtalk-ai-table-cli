@@ -53,14 +53,14 @@
 
 ### 脚本重写
 
-**`scripts/bulk_add_fields.py`：**
+**`bulk_add_fields.py`：**
 - ✅ 改为调用 `create_fields`
 - ✅ 输入参数改为 `<baseId> <tableId> fields.json`
 - ✅ 支持 `name -> fieldName` 自动兼容
 - ✅ 支持 `phone -> telephone` 自动兼容
 - ✅ 增加新字段类型与关联字段 config 校验
 
-**`scripts/import_records.py`：**
+**`import_records.py`：**
 - ✅ 改为调用 `create_records`
 - ✅ 输入参数改为 `<baseId> <tableId> data.(csv|json)`
 - ✅ 记录结构改为 `cells`
@@ -78,7 +78,7 @@
 
 ### 测试
 
-- ✅ `tests/test_security.py` 重写为新版 schema 测试
+- ✅ `test_security.py` 重写为新版 schema 测试
 - ✅ 自动化测试 **21 / 21 全通过**
 - ✅ Python 语法编译通过：`bulk_add_fields.py`、`import_records.py`、`test_security.py`
 
@@ -185,12 +185,12 @@
 - ✅ **输入清理** - 自动去除空白、验证空值、数字类型自动转换
 
 **脚本重构：**
-- `scripts/bulk_add_fields.py` - 全面安全加固，Python 3.9 兼容
-- `scripts/import_records.py` - 全面安全加固，新增 JSON 导入支持
+- `bulk_add_fields.py` - 全面安全加固，Python 3.9 兼容
+- `import_records.py` - 全面安全加固，新增 JSON 导入支持
 
 **测试覆盖：**
-- 新增 `tests/test_security.py` - 25 项自动化安全测试，全部通过 ✅
-- 新增 `tests/TEST_REPORT.md` - 完整测试报告和安全对比分析
+- 新增 `test_security.py` - 25 项自动化安全测试，全部通过 ✅
+- 新增 `TEST_REPORT.md` - 完整测试报告和安全对比分析
 
 **文档更新：**
 - SKILL.md 新增"安全加固措施"章节，透明说明所有保护机制
@@ -345,7 +345,7 @@
 ### 文档
 - API 参考文档 (references/api-reference.md)
 - 错误码说明 (references/error-codes.md)
-- 示例脚本 (scripts/)
+- 示例脚本
 
 ### 依赖
 - mcporter CLI (v0.7.0+)

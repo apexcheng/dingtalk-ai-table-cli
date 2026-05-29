@@ -17,4 +17,4 @@ if [ -z "$BASE_ID" ] || [ -z "$TABLE_ID" ] || [ -z "$CSV_FILE" ]; then
 fi
 
 echo "📥 批量导入记录..."
-python3 scripts/import_records.py "$BASE_ID" "$TABLE_ID" "$CSV_FILE"
+python3 import_records.py "$BASE_ID" "$TABLE_ID" "$CSV_FILE"

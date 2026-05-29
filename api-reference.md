@@ -293,6 +293,13 @@ mcporter call '<mcp-url>' .create_base baseName='销售日报'
 - `cursor` 分页
 - `fieldIds` 限定返回字段
 
+**查询执行硬规则：**
+
+- 使用 `filters` / `sort` 时，不要依赖 `cursor` 连续翻页
+- 批量处理只走“第一页 -> 处理记录 -> 回写辅助标记字段 -> 下次继续查未标记数据”
+- 辅助字段只用于避免重复读取和模拟稳定分页，不承载业务含义
+- 如果没有辅助字段，可以新增 `AI处理标记`、`查询标记`、`同步标记` 或 `回查标记` 之一
+
 参数：
 - `baseId`
 - `tableId`
@@ -323,6 +330,8 @@ mcporter call '<mcp-url>' .create_base baseName='销售日报'
 注意：
 - `singleSelect / multipleSelect` 做过滤时，**必须传 option id，不是 option name**
 - option id 需先通过 `get_fields` 获取
+- `filters` 中使用的是 `fieldId`，不是字段名
+- 在 `filters` / `sort` 场景不要依赖 `cursor` 连续翻页
 
 ## 3.17 create_records
 

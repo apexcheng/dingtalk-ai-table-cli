@@ -27,15 +27,15 @@
 
 ### 3. 工具与自动化 ✅ (15/15)
 
-- [x] 自动 schema 检查脚本（scripts/check-schema.sh）
-- [x] 批量字段脚本（scripts/bulk_add_fields.py）
-- [x] 批量导入脚本（scripts/import_records.py）
+- [x] 自动 schema 检查脚本（check-schema.sh）
+- [x] 批量字段脚本（bulk_add_fields.py）
+- [x] 批量导入脚本（import_records.py）
 - [x] 一次性检查缓存机制
 - [x] 清晰的错误提示
 
 ### 4. 测试覆盖 ✅ (15/15)
 
-- [x] 25 项自动化测试（tests/test_security.py）
+- [x] 25 项自动化测试（test_security.py）
 - [x] 路径安全测试（7 项）
 - [x] UUID 验证测试（2 项）
 - [x] 文件扩展名测试（2 项）
@@ -105,7 +105,7 @@
    - 可直接运行
    - 包含参数说明
 
-3. **scripts/check-schema.sh** - 自动化版本检查
+3. **check-schema.sh** - 自动化版本检查
    - 一次性检查策略
    - 本地缓存机制
    - 清晰的错误提示
@@ -133,7 +133,7 @@
 ### 1. 文档完整性检查
 ```bash
 ls -la /Users/marila/skills/dingtalk-ai-table/
-# 应包含：GETTING_STARTED.md, examples/, scripts/check-schema.sh
+# 应包含：GETTING_STARTED.md, examples/, check-schema.sh
 ```
 
 ### 2. 示例脚本检查
@@ -145,7 +145,7 @@ ls -la /Users/marila/skills/dingtalk-ai-table/examples/
 ### 3. 测试运行
 ```bash
 cd /Users/marila/skills/dingtalk-ai-table
-python3 tests/test_security.py
+python3 test_security.py
 # 应显示：25 passed
 ```
 

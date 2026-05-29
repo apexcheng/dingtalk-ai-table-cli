@@ -17,4 +17,4 @@ if [ -z "$BASE_ID" ] || [ -z "$TABLE_ID" ] || [ -z "$FIELDS_FILE" ]; then
 fi
 
 echo "🆕 批量新增字段..."
-python3 scripts/bulk_add_fields.py "$BASE_ID" "$TABLE_ID" "$FIELDS_FILE"
+python3 bulk_add_fields.py "$BASE_ID" "$TABLE_ID" "$FIELDS_FILE"
