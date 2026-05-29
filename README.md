@@ -1,5 +1,11 @@
 # dingtalk-ai-table 使用说明
 
+本项目最初参考 / fork 自 [aliramw/dingtalk-ai-table](https://github.com/aliramw/dingtalk-ai-table)。
+后续按当前仓库结构独立维护，不自动同步上游结构。
+本项目默认面向 OpenClaw 多 agent + per-agent `mcporter.json` 场景，默认调用当前 agent workspace 中注册的 `dingtalk-ai-table`。
+`DINGTALK_MCP_URL` 仅作为可选直连方式，不是默认方式。
+本项目不是官方项目。
+
 ## 查询限制与推荐策略
 
 钉钉 AI 表格更适合做业务协作表格和结果展示，不适合直接当数据库做大规模、高频、复杂组合查询。
