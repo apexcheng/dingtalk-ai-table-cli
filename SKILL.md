@@ -1,7 +1,7 @@
 ---
 name: dingtalk-ai-table
 description: OpenClaw 调用钉钉 AI 表格 MCP 的安全调用层。Agent 不直接手拼 mcporter 参数，而是优先调用 dingtalk_ai_table 包导出的 Python 函数，由 Python 层完成参数校验、字段 ID 解析、选项 ID 解析、记录增删改查、过滤构造、查询标记分页和附件上传前置。MCP URL 由 MCPORTER_CONFIG 或当前工作目录 config/mcporter.json 隔离配置。
-version: 0.7.3
+version: 1.0.0
 metadata:
   author: Marila@Dingtalk
   category: productivity
