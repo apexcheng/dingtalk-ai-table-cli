@@ -1,20 +1,44 @@
 import json
 import os
 import subprocess
-from typing import Any, List
+from typing import Any, Dict, List
+
+
+MCPORTER_CONFIG_ENV = 'MCPORTER_CONFIG'
+PROJECT_MCPORTER_CONFIG = os.path.join('config', 'mcporter.json')
+MCP_SERVER_NAME = 'dingtalk-ai-table'
+
+
+def get_mcporter_config_path() -> str:
+    """
+    获取 mcporter 配置文件路径。
+
+    优先级：
+    1. MCPORTER_CONFIG 环境变量
+    2. {cwd}/config/mcporter.json
+    """
+    config_path = os.environ.get(MCPORTER_CONFIG_ENV)
+    if config_path:
+        return config_path
+
+    config_path = os.path.join(os.getcwd(), PROJECT_MCPORTER_CONFIG)
+    if os.path.isfile(config_path):
+        return config_path
+
+    raise RuntimeError(
+        '错误：未找到 mcporter 配置文件，请设置 MCPORTER_CONFIG，'
+        '或在当前工作目录创建 config/mcporter.json'
+    )
+
+
+def build_mcporter_env() -> Dict[str, str]:
+    env = os.environ.copy()
+    env[MCPORTER_CONFIG_ENV] = get_mcporter_config_path()
+    return env
 
 
 def build_mcporter_call(args: List[str]) -> List[str]:
-    direct_url = os.environ.get('DINGTALK_AI_TABLE_DIRECT_URL')
-    if direct_url:
-        tool_name = args[0]
-        if not tool_name.startswith('.'):
-            tool_name = f'.{tool_name}'
-        cmd = ['mcporter', 'call', direct_url]
-        args = [tool_name] + args[1:]
-    else:
-        cmd = ['mcporter', 'call', 'dingtalk-ai-table']
-    return cmd + args
+    return ['mcporter', 'call', MCP_SERVER_NAME] + args
 
 
 def run_mcporter(args: List[str], timeout: int = 60) -> Any:
@@ -23,7 +47,13 @@ def run_mcporter(args: List[str], timeout: int = 60) -> Any:
 
     cmd = build_mcporter_call(args)
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=build_mcporter_env(),
+        )
     except subprocess.TimeoutExpired:
         raise RuntimeError(f'错误：命令执行超时（{timeout} 秒）')
     except FileNotFoundError:
