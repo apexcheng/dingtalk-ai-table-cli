@@ -445,8 +445,8 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
     update_cells = pick_scalar(args.update_cells_json, data, "updateCells", "update_cells")
     if isinstance(update_cells, str):
         update_cells = parse_json_text(update_cells, "--update-cells-json")
-    if action == "update" and not isinstance(update_cells, dict):
-        raise CliError("action=update 时必须提供 updateCells")
+    if action == "update" and (not isinstance(update_cells, dict) or not update_cells):
+        raise CliError("action=update 时必须提供非空 updateCells")
     if action == "delete" and filters is None:
         raise CliError("action=delete 时必须提供 filters，禁止无条件批量删除")
 

@@ -1,11 +1,15 @@
 # Examples
 
-这个目录覆盖 13 个 CLI 子命令的最小 JSON 输入示例。
+这个目录覆盖当前 CLI 子命令的最小 JSON 输入示例。
 
 ```text
 get_tables.json
+get_base.json
+list_bases.json
+search_bases.json
 get_fields.json
 create_fields.json
+resolve_table.json
 resolve_field.json
 resolve_option.json
 build_filter.json

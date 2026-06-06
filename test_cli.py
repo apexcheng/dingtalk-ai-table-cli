@@ -195,6 +195,38 @@ class TestCli(unittest.TestCase):
         self.assertEqual(mocked_process.call_count, 1)
         self.assertEqual(mocked_update.call_count, 1)
 
+    def test_process_records_update_empty_update_cells_fails_before_output_file(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "process_update_empty.json"
+            output_path = Path(tmp_dir) / "process_update_empty.jsonl"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "filters": {"operator": "eq", "operands": ["fld_1", "a"]},
+                        "output": str(output_path),
+                        "action": "update",
+                        "updateCells": {},
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            exit_code, payload = self.run_cli([
+                "process-records-with-marker",
+                "--input", str(input_path),
+            ])
+
+            file_exists = output_path.exists()
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["type"], "CliError")
+        self.assertIn("action=update 时必须提供非空 updateCells", payload["error"]["message"])
+        self.assertFalse(file_exists)
+
     def test_process_records_input_delete_action_can_take_effect(self):
         batches = [
             {"records": [{"recordId": "rec_1", "cells": {"fld_1": "a"}}]},

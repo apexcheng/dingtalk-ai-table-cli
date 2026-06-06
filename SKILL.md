@@ -128,6 +128,8 @@ search-bases / list-bases -> get-base -> resolve-table -> resolve-field -> build
 ## CLI 子命令
 
 - `get-base`
+- `list-bases`
+- `search-bases`
 - `get-tables`
 - `get-fields`
 - `create-fields`
