@@ -50,9 +50,11 @@ def parse_json_text(value: str, field_name: str) -> Any:
         raise CliError(f"{field_name} 不是合法 JSON: {exc}") from exc
 
 
-def parse_json_value(value: Optional[str]) -> Any:
+def parse_json_value(value: Any) -> Any:
     if value is None:
         return None
+    if not isinstance(value, str):
+        return value
     try:
         return json.loads(value)
     except json.JSONDecodeError:
@@ -520,8 +522,8 @@ def handle_process_date_range_with_marker(args: argparse.Namespace) -> Any:
     update_cells = pick_scalar(args.update_cells_json, data, "updateCells", "update_cells")
     if isinstance(update_cells, str):
         update_cells = parse_json_text(update_cells, "--update-cells-json")
-    if action == "update" and not isinstance(update_cells, dict):
-        raise CliError("action=update 时必须提供 updateCells")
+    if action == "update" and (not isinstance(update_cells, dict) or not update_cells):
+        raise CliError("action=update 时必须提供非空 updateCells")
 
     resolved_output_dir = resolve_output_path(str(Path(output_dir) / "placeholder.jsonl")).parent
     task_name = pick_scalar(args.task_name, data, "taskName", "task_name", default="date_range_task")

@@ -127,6 +127,19 @@ class TestCli(unittest.TestCase):
         self.assertNotIn("records", payload["result"])
         self.assertEqual(len(lines), 4)
 
+    def test_parse_json_value_handles_non_string_values(self):
+        cases = [
+            (123, 123),
+            (True, True),
+            (["a", "b"], ["a", "b"]),
+            ({"k": "v"}, {"k": "v"}),
+            ("plain string", "plain string"),
+        ]
+
+        for value, expected in cases:
+            with self.subTest(value=value):
+                self.assertEqual(AITABLE_CLI.parse_json_value(value), expected)
+
     def test_process_records_default_action_uses_export_with_marker(self):
         def fake_process_records_with_marker(**kwargs):
             kwargs["process_batch"]([])
@@ -416,6 +429,83 @@ class TestCli(unittest.TestCase):
         self.assertEqual(len(payload["result"]["results"]), 2)
         self.assertEqual(len(first_lines), 1)
         self.assertEqual(len(second_lines), 1)
+
+    def test_process_date_range_update_empty_update_cells_fails_before_output_dir(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "daily"
+            input_path = Path(tmp_dir) / "process_date_update_empty.json"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "baseId": "base12345",
+                        "tableId": "table12345",
+                        "dateFieldId": "fld123456",
+                        "startDate": "2026-06-01",
+                        "endDate": "2026-06-02",
+                        "outputDir": str(output_dir),
+                        "action": "update",
+                        "updateCells": {},
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(AITABLE_CLI, "process_records_with_marker") as process_mock, patch.object(AITABLE_CLI, "safe_update_records") as update_mock:
+                exit_code, payload = self.run_cli([
+                    "process-date-range-with-marker",
+                    "--input", str(input_path),
+                ])
+
+            output_exists = output_dir.exists()
+            first_file_exists = (output_dir / "2026-06-01.jsonl").exists()
+            second_file_exists = (output_dir / "2026-06-02.jsonl").exists()
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["type"], "CliError")
+        self.assertIn("action=update 时必须提供非空 updateCells", payload["error"]["message"])
+        self.assertFalse(output_exists)
+        self.assertFalse(first_file_exists)
+        self.assertFalse(second_file_exists)
+        process_mock.assert_not_called()
+        update_mock.assert_not_called()
+
+    def test_process_date_range_update_non_empty_update_cells_still_works(self):
+        def fake_process_records_with_marker(**kwargs):
+            date_value = kwargs["task_name"].rsplit("_", 1)[-1]
+            kwargs["process_batch"]([{"recordId": f"rec_{date_value}", "cells": {"date": date_value}}])
+            return f"task_{date_value}"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "daily"
+            with patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker) as process_mock, patch.object(AITABLE_CLI, "safe_update_records") as update_mock:
+                exit_code, payload = self.run_cli([
+                    "process-date-range-with-marker",
+                    "--base-id", "base12345",
+                    "--table-id", "table12345",
+                    "--date-field-id", "fld123456",
+                    "--start-date", "2026-06-01",
+                    "--end-date", "2026-06-02",
+                    "--output-dir", str(output_dir),
+                    "--action", "update",
+                    "--update-cells-json", '{"fld_1":"b"}',
+                ])
+
+            first_file = Path(payload["result"]["results"][0]["output"])
+            second_file = Path(payload["result"]["results"][1]["output"])
+            first_lines = first_file.read_text(encoding="utf-8").strip().splitlines()
+            second_lines = second_file.read_text(encoding="utf-8").strip().splitlines()
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["summary"]["action"], "update")
+        self.assertEqual(payload["result"]["summary"]["dayCount"], 2)
+        self.assertEqual(len(payload["result"]["results"]), 2)
+        self.assertEqual(len(first_lines), 1)
+        self.assertEqual(len(second_lines), 1)
+        self.assertEqual(process_mock.call_count, 2)
+        self.assertEqual(update_mock.call_count, 2)
 
 
 if __name__ == "__main__":
