@@ -85,9 +85,16 @@ def _extract_tables(result: Any) -> List[Dict[str, Any]]:
     if isinstance(result, dict):
         if isinstance(result.get('tables'), list):
             return result['tables']
+        base = result.get('base')
+        if isinstance(base, dict) and isinstance(base.get('tables'), list):
+            return base['tables']
         data = result.get('data')
-        if isinstance(data, dict) and isinstance(data.get('tables'), list):
-            return data['tables']
+        if isinstance(data, dict):
+            if isinstance(data.get('tables'), list):
+                return data['tables']
+            base = data.get('base')
+            if isinstance(base, dict) and isinstance(base.get('tables'), list):
+                return base['tables']
     if isinstance(result, list):
         return result
     return []
@@ -114,6 +121,14 @@ def get_tables(base_id: str, table_ids: List[str]) -> Any:
         'tableIds': normalized_table_ids,
     }
     return run_mcporter(['get_tables', '--args', json.dumps(payload, ensure_ascii=False)])
+
+
+def get_base(base_id: str) -> Any:
+    base_id = ensure_resource_id(base_id, 'baseId')
+    payload = {
+        'baseId': base_id,
+    }
+    return run_mcporter(['get_base', '--args', json.dumps(payload, ensure_ascii=False)])
 
 
 def get_fields(base_id: str, table_id: str, field_ids: List[str]) -> Any:
@@ -158,6 +173,31 @@ def get_field_id_by_name(base_id: str, table_id: str, field_name: str) -> str:
             if validate_resource_id(field_id):
                 return field_id
     raise ValueError(f'未找到字段：{field_name}')
+
+
+def get_table_by_name(base_id: str, table_name: str) -> Dict[str, str]:
+    if not isinstance(table_name, str) or not table_name.strip():
+        raise ValueError('table_name 不能为空')
+
+    base_result = get_base(base_id)
+    tables = _extract_tables(base_result)
+    matched_tables = []
+    for table in tables:
+        current_name = table.get('tableName') or table.get('name')
+        if current_name != table_name:
+            continue
+        table_id = table.get('tableId') or table.get('id')
+        if validate_resource_id(table_id):
+            matched_tables.append({
+                'tableId': table_id,
+                'tableName': current_name,
+            })
+
+    if not matched_tables:
+        raise ValueError(f'未找到表：{table_name}')
+    if len(matched_tables) > 1:
+        raise ValueError('找到多个同名表，请人工确认')
+    return matched_tables[0]
 
 
 def get_option_id_by_name(base_id: str, table_id: str, field_name: str, option_name: str) -> str:

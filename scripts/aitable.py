@@ -9,12 +9,13 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from dingtalk_ai_table.fields import create_fields, get_fields, get_tables
+from dingtalk_ai_table.fields import create_fields, get_base, get_fields, get_tables
 from dingtalk_ai_table.filters import and_filter, date_eq_filter, eq_filter, iter_date_values, ne_filter, or_filter
 from dingtalk_ai_table.guards import validate_filter_tree
 from dingtalk_ai_table.records import extract_records
 from dingtalk_ai_table.skill_api import (
     process_records_with_marker,
+    resolve_table,
     resolve_field_id,
     resolve_option_id,
     safe_create_records,
@@ -159,6 +160,12 @@ def handle_get_tables(args: argparse.Namespace) -> Any:
     return get_tables(base_id=base_id, table_ids=table_ids)
 
 
+def handle_get_base(args: argparse.Namespace) -> Any:
+    data = ensure_dict_input(load_input_data(args.input))
+    base_id = require_value(pick_scalar(args.base_id, data, "baseId", "base_id"), "baseId")
+    return get_base(base_id=base_id)
+
+
 def handle_get_fields(args: argparse.Namespace) -> Any:
     data = ensure_dict_input(load_input_data(args.input))
     base_id = require_value(pick_scalar(args.base_id, data, "baseId", "base_id"), "baseId")
@@ -185,6 +192,13 @@ def handle_resolve_field(args: argparse.Namespace) -> Any:
     field_name = require_value(pick_scalar(args.field_name, data, "fieldName", "field_name"), "fieldName")
     field_id = resolve_field_id(base_id=base_id, table_id=table_id, field_name=field_name)
     return {"fieldId": field_id}
+
+
+def handle_resolve_table(args: argparse.Namespace) -> Any:
+    data = ensure_dict_input(load_input_data(args.input))
+    base_id = require_value(pick_scalar(args.base_id, data, "baseId", "base_id"), "baseId")
+    table_name = require_value(pick_scalar(args.table_name, data, "tableName", "table_name"), "tableName")
+    return resolve_table(base_id=base_id, table_name=table_name)
 
 
 def handle_resolve_option(args: argparse.Namespace) -> Any:
@@ -632,6 +646,16 @@ def build_parser() -> JsonArgumentParser:
     get_tables_parser.add_argument("--table-id", action="append", default=None)
     get_tables_parser.set_defaults(handler=handle_get_tables)
 
+    get_base_parser = subparsers.add_parser(
+        "get-base",
+        help="查询 base 信息和表列表",
+        description="Query base metadata and table list by baseId.",
+        formatter_class=HelpFormatter,
+    )
+    add_common_input_argument(get_base_parser)
+    get_base_parser.add_argument("--base-id")
+    get_base_parser.set_defaults(handler=handle_get_base)
+
     get_fields_parser = subparsers.add_parser(
         "get-fields",
         help="查询字段配置",
@@ -664,6 +688,17 @@ def build_parser() -> JsonArgumentParser:
     add_base_table_arguments(resolve_field_parser)
     resolve_field_parser.add_argument("--field-name")
     resolve_field_parser.set_defaults(handler=handle_resolve_field)
+
+    resolve_table_parser = subparsers.add_parser(
+        "resolve-table",
+        help="按表名解析 tableId",
+        description="Resolve tableId from a table name.",
+        formatter_class=HelpFormatter,
+    )
+    add_common_input_argument(resolve_table_parser)
+    resolve_table_parser.add_argument("--base-id")
+    resolve_table_parser.add_argument("--table-name")
+    resolve_table_parser.set_defaults(handler=handle_resolve_table)
 
     resolve_option_parser = subparsers.add_parser(
         "resolve-option",

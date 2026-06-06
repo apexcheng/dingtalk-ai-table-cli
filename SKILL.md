@@ -1,7 +1,7 @@
 ---
 name: dingtalk-ai-table-cli
 description: Agent-first safe DingTalk AI Table access via scripts/aitable.py CLI.
-version: 1.1.0
+version: 1.2.0
 metadata:
   author: Marila@Dingtalk
   category: productivity
@@ -23,30 +23,27 @@ metadata:
 
 # dingtalk-ai-table-cli Skill
 
-Agent 不直接 `import dingtalk_ai_table`，也不手拼 `mcporter call`。
-统一入口是：
+Agent 不直接 `import dingtalk_ai_table`，也不手写 `mcporter call`。
+
+统一入口：
 
 ```bash
 python scripts/aitable.py <subcommand> ...
 ```
 
-`dingtalk_ai_table` 包只作为 CLI 内部实现，不作为 Agent 的主调用面。
-
 ## 规则
 
 - 所有业务调用都走 `scripts/aitable.py`
 - 所有 CLI 输出都保持 JSON
-- 复杂参数优先使用 `--input` JSON 文件
-- 优先读取 `MCPORTER_CONFIG` 指向的配置文件，其次读取当前工作目录下的 `config/mcporter.json`
+- 复杂参数优先使用 `--input`
+- 优先读取 `MCPORTER_CONFIG`，其次读取当前工作目录下的 `config/mcporter.json`
 - `query-records` 默认只返回摘要，不直接输出完整 records
 - `query-records` 单次最多返回 `100` 条，`limit` 不能超过 `100`
-- 不带 `filters` / `sort` 时，可以使用 `cursor` 翻页；带 `filters` 或 `sort` 时，禁止使用 `cursor`
+- 不带 `filters` / `sort` 时可以使用 `cursor`；带 `filters` 或 `sort` 时禁止使用 `cursor`
 - 带 `filters` / `sort` 且可能超过 `100` 条时，改用 `process-records-with-marker` 或 `process-date-range-with-marker`
 - `process-records-with-marker` 推荐动作名是 `export-with-marker`
-- `process-records-with-marker` 适用于带 `filters` 或 `sort` 的批处理场景；无过滤条件时不要使用。
 - `process-records-with-marker` 的 `delete` 不写查询标记
-- `process-date-range-with-marker` 也走同一套 CLI 入口和 JSON 输出规则
-- `update-records` 会忽略空字符串和 `null` 等空值，因此当前版本不支持通过 `update-records` 清空字段；如果要清空字段，先人工确认，不要默认执行
+- `update-records` 当前不支持用来清空字段
 - `process-date-range-with-marker` 的日期范围最多 `366` 天
 
 ## 命令选择
@@ -55,9 +52,11 @@ python scripts/aitable.py <subcommand> ...
 
 | 场景 | 使用命令 |
 | --- | --- |
-| 查看表列表 | `get-tables` |
+| 查看 base 信息和表列表 | `get-base` |
+| 查看表结构 | `get-tables` |
 | 查看字段列表 | `get-fields` |
 | 创建字段 | `create-fields` |
+| 根据表名解析 tableId | `resolve-table` |
 | 根据字段名获取字段 ID | `resolve-field` |
 | 根据单选/多选名称获取选项 ID | `resolve-option` |
 | 构造筛选条件 | `build-filter` |
@@ -68,6 +67,21 @@ python scripts/aitable.py <subcommand> ...
 | 修改记录 | `update-records` |
 | 删除已知 recordId 的记录 | `delete-records` |
 | 准备附件上传参数 | `prepare-attachment-upload` |
+
+## 表查询规则
+
+- `get-base` 用于查询 base 信息和 table 列表
+- `get-tables` 不是列出所有表
+- `get-tables` 只适用于已知 `tableId` 后查询表结构
+- 如果只知道表名，应先用 `resolve-table`
+- 当前必须先提供 `baseId`
+- 当前没有 `list-bases` / `search-bases`
+
+推荐流程：
+
+```text
+resolve-table -> resolve-field -> build-filter -> query-records
+```
 
 ## 推荐流程
 
@@ -106,9 +120,11 @@ python scripts/aitable.py <subcommand> ...
 
 ## CLI 子命令
 
+- `get-base`
 - `get-tables`
 - `get-fields`
 - `create-fields`
+- `resolve-table`
 - `resolve-field`
 - `resolve-option`
 - `build-filter`
@@ -120,12 +136,14 @@ python scripts/aitable.py <subcommand> ...
 - `process-date-range-with-marker`
 - `prepare-attachment-upload`
 
-## 常用调用模板
+## 常用模板
 
 ```bash
-python scripts/aitable.py resolve-field --base-id base_xxxx --table-id tbl_xxxx --field-name 状态
-python scripts/aitable.py resolve-option --base-id base_xxxx --table-id tbl_xxxx --field-name 状态 --option-name 进行中
-python scripts/aitable.py build-filter --operator eq --field-id fld_xxxx --value 进行中
+python scripts/aitable.py get-base --base-id xxx
+python scripts/aitable.py resolve-table --base-id xxx --table-name 评价收集表
+python scripts/aitable.py resolve-field --base-id xxx --table-id xxx --field-name 状态
+python scripts/aitable.py resolve-option --base-id xxx --table-id xxx --field-name 状态 --option-name 进行中
+python scripts/aitable.py build-filter --operator eq --field-id fld_xxx --value 进行中
 python scripts/aitable.py query-records --input examples/query_records.json
 python scripts/aitable.py create-records --input examples/create_records.json
 python scripts/aitable.py update-records --input examples/update_records.json

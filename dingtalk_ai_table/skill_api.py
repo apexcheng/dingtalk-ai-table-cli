@@ -1,7 +1,7 @@
 from typing import Any, Callable, Dict, List, Optional
 
 from .attachments import prepare_attachment_upload
-from .fields import get_field_id_by_name, get_option_id_by_name
+from .fields import get_field_id_by_name, get_option_id_by_name, get_table_by_name
 from .markers import query_date_range_with_marker, query_with_marker
 from .records import create_records, delete_records, query_records, update_records
 
@@ -28,6 +28,16 @@ def resolve_option_id(base_id: str, table_id: str, field_name: str, option_name:
     :return str: option id
     """
     return get_option_id_by_name(base_id, table_id, field_name, option_name)
+
+
+def resolve_table(base_id: str, table_name: str) -> Dict[str, str]:
+    """
+    按表名解析 tableId。
+    :param str base_id: Base ID
+    :param str table_name: 表名
+    :return dict: {"tableId": "...", "tableName": "..."}
+    """
+    return get_table_by_name(base_id, table_name)
 
 
 def safe_query_records(

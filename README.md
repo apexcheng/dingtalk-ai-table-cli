@@ -2,36 +2,40 @@
 
 这是一个面向 Agent 的钉钉 AI 表格安全 CLI。
 
-`dingtalk_ai_table` 包只保留为内部实现，Agent 统一通过下面的入口调用：
+统一入口：
 
 ```bash
 python scripts/aitable.py <subcommand> ...
 ```
 
+`dingtalk_ai_table` 包只作为内部实现，不建议 Agent 直接 `import`，也不要手写 `mcporter call`。
+
 ## 配置
 
-按这个顺序配就行：
+按下面顺序读取配置：
 
-1. 优先读取 `MCPORTER_CONFIG` 指向的配置文件
-2. 其次读取当前工作目录下的 `config/mcporter.json`
-
-不要求 `pip install dingtalk_ai_table`，也不要求设置 `PYTHONPATH`。
+1. `MCPORTER_CONFIG`
+2. 当前工作目录下的 `config/mcporter.json`
 
 ## 关键边界
 
+- 所有命令输出仍然是 JSON
+- 复杂参数优先使用 `--input`
 - `query-records` 单次最多返回 `100` 条
 - `limit` 不能超过 `100`
-- 不带 `filters` / `sort` 时，可以使用 `cursor` 翻页
-- 带 `filters` 或 `sort` 时，禁止使用 `cursor`
-- 带 `filters` / `sort` 且可能超过 `100` 条时，改用 `process-records-with-marker` 或 `process-date-range-with-marker`
-- 当前 `update-records` 会忽略空字符串和 `null` 等空值，因此不能用它清空字段；如果要清空字段，先人工确认，不要默认执行
+- 不带 `filters` / `sort` 时可以使用 `cursor`
+- 带 `filters` 或 `sort` 时禁止使用 `cursor`
+- 带 `filters` / `sort` 且可能超过 `100` 条时，使用 `process-records-with-marker` 或 `process-date-range-with-marker`
+- `update-records` 当前不会用来清空字段
 - `process-date-range-with-marker` 的日期范围最多 `366` 天
 
 ## CLI 子命令
 
+- `get-base`
 - `get-tables`
 - `get-fields`
 - `create-fields`
+- `resolve-table`
 - `resolve-field`
 - `resolve-option`
 - `build-filter`
@@ -43,25 +47,35 @@ python scripts/aitable.py <subcommand> ...
 - `process-date-range-with-marker`
 - `prepare-attachment-upload`
 
+## 表查询说明
+
+- `get-base`：按 `baseId` 查询 base 信息和 table 列表
+- `get-tables`：不是“列出 base 下所有表”
+- `get-tables` 只适用于“已经知道 `tableId`，再按 `tableId` 查询表结构”
+- 如果只知道表名，应先使用 `resolve-table`
+- 当前 CLI 仍然要求先提供 `baseId`，没有新增 `list-bases` / `search-bases`
+
+推荐流程：
+
+```text
+resolve-table -> resolve-field -> build-filter -> query-records
+```
+
 ## 输出规则
 
 - `stdout` 只输出最终 JSON
 - 失败时也输出 JSON，包含 `ok=false`、`command`、`error.type`、`error.message`
-- `query-records` 默认只输出摘要和最多 3 条 `preview`
+- `query-records` 默认只输出摘要和最多 `3` 条 `preview`
 - `query-records --output <file>` 时，完整 records 写入 JSONL 文件
 - `process-records-with-marker` 必须传 `--output`
 - `process-date-range-with-marker` 必须传 `--output-dir`
-- `process-records-with-marker` 推荐使用 `export-with-marker`，这个动作会写入查询标记
-- `process-records-with-marker` 适用于带 `filters` 或 `sort` 的批处理场景；无过滤条件时不要使用。
-- `process-records-with-marker` 的 `delete` 不写查询标记，只做“查询一批、删一批、直到为空”
 - 大结果不会直接打印到终端
 
 ## 示例
 
 ```bash
-python scripts/aitable.py resolve-field --base-id xxx --table-id xxx --field-name 状态
+python scripts/aitable.py get-base --base-id xxx
+python scripts/aitable.py resolve-table --base-id xxx --table-name 评价收集表
+python scripts/aitable.py resolve-field --base-id xxx --table-id xxx --field-name 日期
 python scripts/aitable.py query-records --input examples/query_records.json
-python scripts/aitable.py create-records --input examples/create_records.json
-python scripts/aitable.py process-records-with-marker --input examples/process_records_with_marker.json
-python scripts/aitable.py process-date-range-with-marker --input examples/process_date_range_with_marker.json
 ```

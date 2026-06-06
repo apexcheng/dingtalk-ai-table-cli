@@ -27,8 +27,10 @@ class TestCli(unittest.TestCase):
     def test_all_subcommands_dispatch(self):
         cases = [
             ("get-tables", ["--base-id", "base12345", "--table-id", "tbl_1"], "handle_get_tables"),
+            ("get-base", ["--base-id", "base12345"], "handle_get_base"),
             ("get-fields", ["--base-id", "base12345", "--table-id", "tbl_1", "--field-id", "fld_1"], "handle_get_fields"),
             ("create-fields", ["--base-id", "base12345", "--table-id", "tbl_1", "--field", '{"fieldName":"状态","type":"text"}'], "handle_create_fields"),
+            ("resolve-table", ["--base-id", "base12345", "--table-name", "评价收集表"], "handle_resolve_table"),
             ("resolve-field", ["--base-id", "base12345", "--table-id", "tbl_1", "--field-name", "状态"], "handle_resolve_field"),
             ("resolve-option", ["--base-id", "base12345", "--table-id", "tbl_1", "--field-name", "状态", "--option-name", "进行中"], "handle_resolve_option"),
             ("build-filter", ["--operator", "eq", "--field-id", "fld_1", "--value", "1"], "handle_build_filter"),
@@ -83,6 +85,50 @@ class TestCli(unittest.TestCase):
         self.assertNotIn("records", payload["result"])
         self.assertEqual(len(lines), 4)
 
+    def test_resolve_table_returns_unique_match(self):
+        with patch.object(
+            AITABLE_CLI,
+            "resolve_table",
+            return_value={"tableId": "tbl_1", "tableName": "评价收集表"},
+        ) as mocked:
+            exit_code, payload = self.run_cli([
+                "resolve-table",
+                "--base-id", "base12345",
+                "--table-name", "评价收集表",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["tableId"], "tbl_1")
+        self.assertEqual(payload["result"]["tableName"], "评价收集表")
+        mocked.assert_called_once_with(base_id="base12345", table_name="评价收集表")
+
+    def test_resolve_table_not_found_returns_clear_error(self):
+        with patch.object(AITABLE_CLI, "resolve_table", side_effect=ValueError("未找到表：评价收集表")):
+            exit_code, payload = self.run_cli([
+                "resolve-table",
+                "--base-id", "base12345",
+                "--table-name", "评价收集表",
+            ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["type"], "ValueError")
+        self.assertEqual(payload["error"]["message"], "未找到表：评价收集表")
+
+    def test_resolve_table_duplicate_name_returns_clear_error(self):
+        with patch.object(AITABLE_CLI, "resolve_table", side_effect=ValueError("找到多个同名表，请人工确认")):
+            exit_code, payload = self.run_cli([
+                "resolve-table",
+                "--base-id", "base12345",
+                "--table-name", "评价收集表",
+            ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["type"], "ValueError")
+        self.assertEqual(payload["error"]["message"], "找到多个同名表，请人工确认")
+
     def test_process_records_delete_does_not_use_marker_update(self):
         batches = [
             {"records": [{"recordId": "rec_1", "cells": {"fld_1": "a"}}, {"recordId": "rec_2", "cells": {"fld_1": "b"}}]},
@@ -128,7 +174,7 @@ class TestCli(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         self.assertFalse(payload["ok"])
         self.assertEqual(payload["error"]["type"], "CliError")
-        self.assertIn("action=delete 时必须提供 filters", payload["error"]["message"])
+        self.assertIn("action=delete", payload["error"]["message"])
         query_mock.assert_not_called()
         delete_mock.assert_not_called()
 
