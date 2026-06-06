@@ -610,7 +610,7 @@ def build_parser() -> JsonArgumentParser:
         epilog=(
             "Config priority:\n"
             "  1. agent workspace/config/mcporter.json\n"
-            "  2. DINGTALK_AI_TABLE_DIRECT_URL\n\n"
+            "  2. current working directory config/mcporter.json\n\n"
             "Examples:\n"
             "  python scripts/aitable.py resolve-field --base-id xxx --table-id xxx --field-name 状态\n"
             "  python scripts/aitable.py query-records --input examples/query_records.json\n"

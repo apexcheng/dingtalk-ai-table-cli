@@ -13,7 +13,7 @@ python scripts/aitable.py <subcommand> ...
 按这个顺序配就行：
 
 1. 优先使用 `agent workspace/config/mcporter.json`
-2. 其次使用 `DINGTALK_AI_TABLE_DIRECT_URL`
+2. 其次使用当前工作目录下的 `config/mcporter.json`
 
 不要求 `pip install dingtalk_ai_table`，也不要求设置 `PYTHONPATH`。
 

@@ -11,20 +11,19 @@ metadata:
     - mcp
     - automation
     - data-management
-  documentation: https://github.com/apexcheng/dingtalk-ai-tableV2
-  support: https://github.com/apexcheng/dingtalk-ai-tableV2/issues
+  documentation: https://github.com/apexcheng/dingtalk-ai-table-cli
+  support: https://github.com/apexcheng/dingtalk-ai-table-cli/issues
   openclaw:
     requires:
       bins:
         - mcporter
         - python3
-    homepage: https://github.com/apexcheng/dingtalk-ai-tableV2
+    homepage: https://github.com/apexcheng/dingtalk-ai-table-cli
 ---
 
 # dingtalk-ai-table-cli Skill
 
 Agent 不直接 `import dingtalk_ai_table`，也不手拼 `mcporter call`。
-
 统一入口是：
 
 ```bash
@@ -58,3 +57,18 @@ python scripts/aitable.py <subcommand> ...
 - `process-records-with-marker`
 - `process-date-range-with-marker`
 - `prepare-attachment-upload`
+
+## 常用调用模板
+
+```bash
+python scripts/aitable.py resolve-field --base-id xxx --table-id xxx --field-name 状态
+python scripts/aitable.py resolve-option --base-id xxx --table-id xxx --field-name 状态 --option-name 进行中
+python scripts/aitable.py build-filter --operator eq --field-id fld_xxx --value 进行中
+python scripts/aitable.py query-records --input examples/query_records.json
+python scripts/aitable.py create-records --input examples/create_records.json
+python scripts/aitable.py update-records --input examples/update_records.json
+python scripts/aitable.py delete-records --input examples/delete_records.json
+python scripts/aitable.py process-records-with-marker --input examples/process_records_with_marker.json
+python scripts/aitable.py process-date-range-with-marker --input examples/process_date_range_with_marker.json
+python scripts/aitable.py prepare-attachment-upload --input examples/prepare_attachment_upload.json
+```
