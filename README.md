@@ -2,7 +2,7 @@
 
 这是一个面向 Agent 的钉钉 AI 表格安全 CLI。
 
-`dingtalk_ai_table` 包保留为内部实现，Agent 统一通过下面的入口调用：
+`dingtalk_ai_table` 包只保留为内部实现，Agent 统一通过下面的入口调用：
 
 ```bash
 python scripts/aitable.py <subcommand> ...
@@ -12,7 +12,6 @@ python scripts/aitable.py <subcommand> ...
 
 - 需要 `mcporter >= 0.8.1`
 - 默认调用 `mcporter call dingtalk-ai-table ...`
-- 如果当前环境没有注册名，可用 `DINGTALK_AI_TABLE_DIRECT_URL` 兜底
 - 不要求 `pip install dingtalk_ai_table`
 - 不要求设置 `PYTHONPATH`
 
@@ -40,14 +39,16 @@ python scripts/aitable.py <subcommand> ...
 - `query-records --output <file>` 时，完整 records 写入 JSONL 文件
 - `process-records-with-marker` 必须传 `--output`
 - `process-date-range-with-marker` 必须传 `--output-dir`
+- `process-records-with-marker` 推荐使用 `export-with-marker`，这个动作会写入查询标记
+- `process-records-with-marker` 的 `delete` 不写查询标记，只做“查询一批、删一批、直到为空”
 - 大结果不会直接打印到终端
 
 ## 示例
 
 ```bash
 python scripts/aitable.py resolve-field --base-id xxx --table-id xxx --field-name 状态
-python scripts/aitable.py query-records --input examples/query_records.json --output out/query_records.jsonl
+python scripts/aitable.py query-records --input examples/query_records.json
 python scripts/aitable.py create-records --input examples/create_records.json
-python scripts/aitable.py process-records-with-marker --input examples/query_records.json --output out/process.jsonl
-python scripts/aitable.py process-date-range-with-marker --base-id xxx --table-id xxx --date-field-id fld_xxx --start-date 2026-06-01 --end-date 2026-06-07 --output-dir out/daily
+python scripts/aitable.py process-records-with-marker --input examples/process_records_with_marker.json
+python scripts/aitable.py process-date-range-with-marker --input examples/process_date_range_with_marker.json
 ```

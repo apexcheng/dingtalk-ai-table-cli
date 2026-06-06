@@ -24,6 +24,34 @@ class TestCli(unittest.TestCase):
         self.assertTrue(output)
         return exit_code, json.loads(output)
 
+    def test_all_subcommands_dispatch(self):
+        cases = [
+            ("get-tables", ["--base-id", "base12345", "--table-id", "tbl_1"], "handle_get_tables"),
+            ("get-fields", ["--base-id", "base12345", "--table-id", "tbl_1", "--field-id", "fld_1"], "handle_get_fields"),
+            ("create-fields", ["--base-id", "base12345", "--table-id", "tbl_1", "--field", '{"fieldName":"状态","type":"text"}'], "handle_create_fields"),
+            ("resolve-field", ["--base-id", "base12345", "--table-id", "tbl_1", "--field-name", "状态"], "handle_resolve_field"),
+            ("resolve-option", ["--base-id", "base12345", "--table-id", "tbl_1", "--field-name", "状态", "--option-name", "进行中"], "handle_resolve_option"),
+            ("build-filter", ["--operator", "eq", "--field-id", "fld_1", "--value", "1"], "handle_build_filter"),
+            ("query-records", ["--base-id", "base12345", "--table-id", "tbl_1", "--output", "out/query.jsonl"], "handle_query_records"),
+            ("create-records", ["--base-id", "base12345", "--table-id", "tbl_1", "--record", '{"cells":{"fld_1":"张三"}}'], "handle_create_records"),
+            ("update-records", ["--base-id", "base12345", "--table-id", "tbl_1", "--record", '{"recordId":"rec_1","cells":{"fld_1":"李四"}}'], "handle_update_records"),
+            ("delete-records", ["--base-id", "base12345", "--table-id", "tbl_1", "--record-id", "rec_1"], "handle_delete_records"),
+            ("process-records-with-marker", ["--base-id", "base12345", "--table-id", "tbl_1", "--output", "out/process.jsonl"], "handle_process_records_with_marker"),
+            ("process-date-range-with-marker", ["--base-id", "base12345", "--table-id", "tbl_1", "--date-field-id", "fld_date", "--start-date", "2026-06-01", "--end-date", "2026-06-02", "--output-dir", "out/daily"], "handle_process_date_range_with_marker"),
+            ("prepare-attachment-upload", ["--base-id", "base12345", "--file-name", "example.png", "--size", "12345"], "handle_prepare_attachment_upload"),
+        ]
+
+        for command, argv_tail, handler_name in cases:
+            with self.subTest(command=command):
+                with patch.object(AITABLE_CLI, handler_name, return_value={"handler": handler_name}) as mocked:
+                    exit_code, payload = self.run_cli([command, *argv_tail])
+
+                self.assertEqual(exit_code, 0)
+                self.assertTrue(payload["ok"])
+                self.assertEqual(payload["command"], command)
+                self.assertEqual(payload["result"]["handler"], handler_name)
+                mocked.assert_called_once()
+
     def test_query_records_with_output_only_returns_summary(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_path = Path(tmp_dir) / "records.jsonl"
@@ -55,17 +83,34 @@ class TestCli(unittest.TestCase):
         self.assertNotIn("records", payload["result"])
         self.assertEqual(len(lines), 4)
 
-    def test_process_records_with_marker_requires_output(self):
-        exit_code, payload = self.run_cli([
-            "process-records-with-marker",
-            "--base-id", "base12345",
-            "--table-id", "table12345",
-            "--filters-json", '{"operator":"eq","operands":["fld123456","x"]}',
-        ])
+    def test_process_records_delete_does_not_use_marker_update(self):
+        batches = [
+            {"records": [{"recordId": "rec_1", "cells": {"fld_1": "a"}}, {"recordId": "rec_2", "cells": {"fld_1": "b"}}]},
+            {"records": [{"recordId": "rec_3", "cells": {"fld_1": "c"}}]},
+            {"records": []},
+        ]
 
-        self.assertEqual(exit_code, 1)
-        self.assertFalse(payload["ok"])
-        self.assertEqual(payload["command"], "process-records-with-marker")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "delete.jsonl"
+            with patch.object(AITABLE_CLI, "safe_query_records", side_effect=batches) as query_mock, patch.object(AITABLE_CLI, "safe_delete_records") as delete_mock, patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=AssertionError("marker path should not be used")):
+                exit_code, payload = self.run_cli([
+                    "process-records-with-marker",
+                    "--base-id", "base12345",
+                    "--table-id", "table12345",
+                    "--output", str(output_path),
+                    "--action", "delete",
+                ])
+
+            lines = output_path.read_text(encoding="utf-8").strip().splitlines()
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["summary"]["action"], "delete")
+        self.assertEqual(payload["result"]["summary"]["batchCount"], 2)
+        self.assertEqual(payload["result"]["summary"]["recordCount"], 3)
+        self.assertEqual(len(lines), 3)
+        self.assertEqual(query_mock.call_count, 3)
+        self.assertEqual(delete_mock.call_count, 2)
 
     def test_process_date_range_with_marker_writes_daily_jsonl(self):
         def fake_process_records_with_marker(**kwargs):
@@ -85,18 +130,20 @@ class TestCli(unittest.TestCase):
                     "--output-dir", tmp_dir,
                 ])
 
-            self.assertEqual(exit_code, 0)
-            self.assertTrue(payload["ok"])
-            self.assertEqual(payload["result"]["summary"]["dayCount"], 2)
-            self.assertEqual(payload["result"]["summary"]["recordCount"], 2)
-            self.assertEqual(len(payload["result"]["results"]), 2)
-
             first_file = Path(payload["result"]["results"][0]["output"])
             second_file = Path(payload["result"]["results"][1]["output"])
             self.assertTrue(first_file.exists())
             self.assertTrue(second_file.exists())
-            self.assertEqual(len(first_file.read_text(encoding="utf-8").strip().splitlines()), 1)
-            self.assertEqual(len(second_file.read_text(encoding="utf-8").strip().splitlines()), 1)
+            first_lines = first_file.read_text(encoding="utf-8").strip().splitlines()
+            second_lines = second_file.read_text(encoding="utf-8").strip().splitlines()
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["summary"]["dayCount"], 2)
+        self.assertEqual(payload["result"]["summary"]["recordCount"], 2)
+        self.assertEqual(len(payload["result"]["results"]), 2)
+        self.assertEqual(len(first_lines), 1)
+        self.assertEqual(len(second_lines), 1)
 
 
 if __name__ == "__main__":

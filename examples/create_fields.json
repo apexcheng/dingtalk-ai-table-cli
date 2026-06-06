@@ -1,0 +1,10 @@
+{
+  "baseId": "base_xxx",
+  "tableId": "tbl_xxx",
+  "fields": [
+    {
+      "fieldName": "状态",
+      "type": "text"
+    }
+  ]
+}

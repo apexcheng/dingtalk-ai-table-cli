@@ -129,6 +129,18 @@ def build_preview(records: List[Dict[str, Any]], preview: int) -> List[Dict[str,
     return records[:preview]
 
 
+def normalize_process_action(action: Optional[str]) -> str:
+    if action is None or not isinstance(action, str) or not action.strip():
+        return "export-with-marker"
+
+    normalized = action.strip()
+    if normalized in {"stats", "collect"}:
+        return "export-with-marker"
+    if normalized in {"export-with-marker", "update", "delete"}:
+        return normalized
+    raise CliError(f"不支持的 action: {action}")
+
+
 def extract_record_id(record: Dict[str, Any]) -> str:
     record_id = record.get("recordId") or record.get("id")
     if not record_id:
@@ -300,7 +312,7 @@ def handle_delete_records(args: argparse.Namespace) -> Any:
     return safe_delete_records(base_id=base_id, table_id=table_id, record_ids=record_ids)
 
 
-def build_process_summary(
+def build_marker_process_summary(
     action: str,
     base_id: str,
     table_id: str,
@@ -324,14 +336,6 @@ def build_process_summary(
             remaining = preview - len(summary["preview"])
             summary["preview"].extend(batch[:remaining])
 
-        if action == "stats" or action == "collect":
-            return
-
-        if action == "delete":
-            record_ids = [extract_record_id(record) for record in batch]
-            safe_delete_records(base_id=base_id, table_id=table_id, record_ids=record_ids)
-            return
-
         if action == "update":
             records = [
                 {"recordId": extract_record_id(record), "cells": update_cells}
@@ -340,6 +344,51 @@ def build_process_summary(
             safe_update_records(base_id=base_id, table_id=table_id, records=records)
 
     return summary, process_batch
+
+
+def delete_records_until_empty(
+    base_id: str,
+    table_id: str,
+    output_file: TextIO,
+    preview: int,
+    filters: Optional[Dict[str, Any]] = None,
+    sort: Optional[Any] = None,
+    field_ids: Optional[List[str]] = None,
+    keyword: Optional[str] = None,
+) -> Dict[str, Any]:
+    summary = {
+        "action": "delete",
+        "batchCount": 0,
+        "recordCount": 0,
+        "preview": [],
+    }
+
+    while True:
+        result = safe_query_records(
+            base_id=base_id,
+            table_id=table_id,
+            filters=filters,
+            keyword=keyword,
+            sort=sort,
+            field_ids=field_ids,
+            limit=100,
+        )
+        batch = extract_records(result)
+        if not batch:
+            break
+
+        summary["batchCount"] += 1
+        summary["recordCount"] += len(batch)
+        append_jsonl_records(output_file, batch)
+
+        if len(summary["preview"]) < preview:
+            remaining = preview - len(summary["preview"])
+            summary["preview"].extend(batch[:remaining])
+
+        record_ids = [extract_record_id(record) for record in batch]
+        safe_delete_records(base_id=base_id, table_id=table_id, record_ids=record_ids)
+
+    return summary
 
 
 def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
@@ -355,7 +404,7 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
     output_path = require_value(pick_scalar(args.output, data, "output"), "output")
     preview = pick_scalar(args.preview, data, "preview", default=3)
 
-    action = pick_scalar(args.action, data, "action", default="stats")
+    action = normalize_process_action(pick_scalar(args.action, data, "action"))
     update_cells = pick_scalar(args.update_cells_json, data, "updateCells", "update_cells")
     if isinstance(update_cells, str):
         update_cells = parse_json_text(update_cells, "--update-cells-json")
@@ -364,7 +413,23 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
 
     resolved_output_path = resolve_output_path(output_path)
     with resolved_output_path.open("w", encoding="utf-8") as output_file:
-        summary, process_batch = build_process_summary(
+        if action == "delete":
+            summary = delete_records_until_empty(
+                base_id=base_id,
+                table_id=table_id,
+                output_file=output_file,
+                preview=preview,
+                filters=filters,
+                sort=sort,
+                field_ids=pick_list(args.field_id, data, "fieldIds", "field_ids"),
+                keyword=pick_scalar(args.keyword, data, "keyword"),
+            )
+            return {
+                "output": str(resolved_output_path),
+                "summary": summary,
+            }
+
+        summary, process_batch = build_marker_process_summary(
             action=action,
             base_id=base_id,
             table_id=table_id,
@@ -409,7 +474,7 @@ def handle_process_date_range_with_marker(args: argparse.Namespace) -> Any:
     output_dir = require_value(pick_scalar(args.output_dir, data, "outputDir", "output_dir"), "outputDir")
     preview = pick_scalar(args.preview, data, "preview", default=3)
 
-    action = pick_scalar(args.action, data, "action", default="stats")
+    action = normalize_process_action(pick_scalar(args.action, data, "action"))
     update_cells = pick_scalar(args.update_cells_json, data, "updateCells", "update_cells")
     if isinstance(update_cells, str):
         update_cells = parse_json_text(update_cells, "--update-cells-json")
@@ -435,34 +500,49 @@ def handle_process_date_range_with_marker(args: argparse.Namespace) -> Any:
         current_filters = and_filter(filters, day_filter) if filters is not None else day_filter
         day_output_path = resolve_output_path(str(resolved_output_dir / f"{date_value}.jsonl"))
         with day_output_path.open("w", encoding="utf-8") as output_file:
-            day_summary, process_batch = build_process_summary(
-                action=action,
-                base_id=base_id,
-                table_id=table_id,
-                preview=preview,
-                output_file=output_file,
-                update_cells=update_cells,
-            )
-            task_marker = process_records_with_marker(
-                base_id=base_id,
-                table_id=table_id,
-                process_batch=process_batch,
-                filters=current_filters,
-                sort=sort,
-                field_ids=field_ids,
-                keyword=keyword,
-                task_name=f"{task_name}_{date_value}",
-                readonly=readonly,
-            )
+            if action == "delete":
+                day_summary = delete_records_until_empty(
+                    base_id=base_id,
+                    table_id=table_id,
+                    output_file=output_file,
+                    preview=preview,
+                    filters=current_filters,
+                    sort=sort,
+                    field_ids=field_ids,
+                    keyword=keyword,
+                )
+                task_marker = None
+            else:
+                day_summary, process_batch = build_marker_process_summary(
+                    action=action,
+                    base_id=base_id,
+                    table_id=table_id,
+                    preview=preview,
+                    output_file=output_file,
+                    update_cells=update_cells,
+                )
+                task_marker = process_records_with_marker(
+                    base_id=base_id,
+                    table_id=table_id,
+                    process_batch=process_batch,
+                    filters=current_filters,
+                    sort=sort,
+                    field_ids=field_ids,
+                    keyword=keyword,
+                    task_name=f"{task_name}_{date_value}",
+                    readonly=readonly,
+                )
         total_summary["dayCount"] += 1
         total_summary["batchCount"] += day_summary["batchCount"]
         total_summary["recordCount"] += day_summary["recordCount"]
-        all_results.append({
+        day_result = {
             "date": date_value,
-            "taskMarker": task_marker,
             "output": str(day_output_path),
             "summary": day_summary,
-        })
+        }
+        if task_marker is not None:
+            day_result["taskMarker"] = task_marker
+        all_results.append(day_result)
 
     return {
         "outputDir": str(resolved_output_dir),
@@ -506,7 +586,10 @@ def add_process_arguments(parser: argparse.ArgumentParser) -> None:
     add_query_arguments(parser)
     parser.add_argument("--task-name")
     parser.add_argument("--readonly", action="store_true", default=None)
-    parser.add_argument("--action", choices=["stats", "collect", "update", "delete"])
+    parser.add_argument(
+        "--action",
+        help="export-with-marker | update | delete (stats / collect 为旧别名)",
+    )
     parser.add_argument("--update-cells-json", help="action=update 时传入 cells JSON")
 
 

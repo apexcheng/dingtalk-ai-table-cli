@@ -3,8 +3,9 @@
   "tableId": "tbl_xxx",
   "records": [
     {
+      "recordId": "rec_xxx",
       "cells": {
-        "fld_name_xxx": "张三"
+        "fld_name_xxx": "李四"
       }
     }
   ]

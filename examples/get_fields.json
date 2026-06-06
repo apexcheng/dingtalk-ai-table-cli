@@ -1,0 +1,7 @@
+{
+  "baseId": "base_xxx",
+  "tableId": "tbl_xxx",
+  "fieldIds": [
+    "fld_xxx"
+  ]
+}

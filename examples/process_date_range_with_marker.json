@@ -1,0 +1,9 @@
+{
+  "baseId": "base_xxx",
+  "tableId": "tbl_xxx",
+  "dateFieldId": "fld_date_xxx",
+  "startDate": "2026-06-01",
+  "endDate": "2026-06-07",
+  "outputDir": "out/daily",
+  "action": "export-with-marker"
+}
