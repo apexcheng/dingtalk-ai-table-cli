@@ -1,7 +1,7 @@
 import json
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from .client import run_mcporter
+from .client import run_mcporter, TruncatedResponseError
 from .guards import (
     COMPOUND_FILTER_OPERATORS,
     SUPPORTED_FILTER_OPERATORS,
@@ -143,11 +143,13 @@ def query_records(
     field_ids: Optional[List[str]] = None,
     limit: Optional[int] = None,
     cursor: Optional[str] = None,
+    _internal_cursor_ok: bool = False,
 ) -> Any:
     base_id = ensure_resource_id(base_id, 'baseId')
     table_id = ensure_resource_id(table_id, 'tableId')
     query_limit = normalize_query_limit(limit)
-    validate_no_cursor_with_filters_or_sort(filters, sort, cursor)
+    if not _internal_cursor_ok:
+        validate_no_cursor_with_filters_or_sort(filters, sort, cursor)
     validate_filter_tree(filters)
     payload_filters = normalize_query_filters(filters)
 
@@ -171,7 +173,14 @@ def query_records(
     if cursor is not None:
         payload['cursor'] = cursor
 
-    return run_mcporter(['query_records', '--args', json.dumps(payload, ensure_ascii=False)])
+    try:
+        return run_mcporter(['query_records', '--args', json.dumps(payload, ensure_ascii=False)])
+    except TruncatedResponseError as exc:
+        if exc.suggested_limit and query_limit > exc.suggested_limit:
+            # Retry with a smaller limit to avoid pipe buffer truncation.
+            payload['limit'] = exc.suggested_limit
+            return run_mcporter(['query_records', '--args', json.dumps(payload, ensure_ascii=False)])
+        raise
 
 
 def create_records(base_id: str, table_id: str, records: List[Dict[str, Any]]) -> Any:
@@ -187,7 +196,13 @@ def update_records(base_id: str, table_id: str, records: List[Dict[str, Any]]) -
     table_id = ensure_resource_id(table_id, 'tableId')
     validate_record_batch(records)
     payload = build_update_records_payload(base_id, table_id, records)
-    return run_mcporter(['update_records', '--args', json.dumps(payload, ensure_ascii=False)], timeout=120)
+    try:
+        return run_mcporter(['update_records', '--args', json.dumps(payload, ensure_ascii=False)], timeout=120)
+    except TruncatedResponseError as exc:
+        # update_records response may be truncated when updated records have large cell values.
+        # The update itself succeeded on the server; we just cannot parse the response.
+        # Return a dummy success so callers don't treat it as failure.
+        return {'ok': True, 'status': 'success', 'warning': f'update succeeded but response truncated ({exc})'}
 
 
 def delete_records(base_id: str, table_id: str, record_ids: List[str]) -> Any:

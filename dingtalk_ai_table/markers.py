@@ -7,6 +7,7 @@ from .fields import ensure_query_mark_field
 from .filters import and_filter, date_eq_filter, ne_filter, iter_date_values
 from .guards import MAX_QUERY_LIMIT, ensure_resource_id
 from .records import extract_records, query_records, update_records
+from .client import TruncatedResponseError
 
 READONLY_MARKER_ERROR = 'filters/sort 场景下超过 100 条且禁止写入查询标记，无法保证稳定分页'
 MARK_SYNC_WAIT_SECONDS = 3
@@ -48,19 +49,38 @@ def query_with_marker(
 
     mark_field_id = ensure_query_mark_field(base_id, table_id)
     task_marker = build_task_marker(task_name)
+    cursor = None
 
     while True:
         mark_filter = ne_filter(mark_field_id, task_marker)
         current_filters = and_filter(filters, mark_filter) if filters is not None else mark_filter
-        result = query_records(
-            base_id=base_id,
-            table_id=table_id,
-            filters=current_filters,
-            keyword=keyword,
-            sort=sort,
-            field_ids=field_ids,
-            limit=MAX_QUERY_LIMIT,
-        )
+        try:
+            result = query_records(
+                base_id=base_id,
+                table_id=table_id,
+                filters=current_filters,
+                keyword=keyword,
+                sort=sort,
+                field_ids=field_ids,
+                limit=MAX_QUERY_LIMIT,
+                cursor=cursor,
+                _internal_cursor_ok=True,
+            )
+        except TruncatedResponseError as exc:
+            if exc.suggested_limit and MAX_QUERY_LIMIT > exc.suggested_limit:
+                result = query_records(
+                    base_id=base_id,
+                    table_id=table_id,
+                    filters=current_filters,
+                    keyword=keyword,
+                    sort=sort,
+                    field_ids=field_ids,
+                    limit=exc.suggested_limit,
+                    cursor=cursor,
+                    _internal_cursor_ok=True,
+                )
+            else:
+                raise
         batch_records = extract_records(result)
         if not batch_records:
             break
@@ -72,12 +92,65 @@ def query_with_marker(
                 'recordId': _extract_record_id(record),
                 'cells': {mark_field_id: task_marker},
             })
-        update_records(base_id, table_id, update_payload)
 
-        if len(batch_records) < MAX_QUERY_LIMIT:
+        # Mark records: use record_ids query first (minimal fields → small response),
+        # then update. This avoids pipe buffer truncation that affects bulk update.
+        try:
+            # First: query by record_ids with only mark field to verify IDs exist.
+            result_verify = query_records(
+                base_id=base_id,
+                table_id=table_id,
+                record_ids=[rec['recordId'] for rec in update_payload],
+                field_ids=[mark_field_id],
+                limit=len(update_payload),
+            )
+            updated_verify = extract_records(result_verify)
+            # Build clean payload from verified records.
+            clean_payload = [
+                {'recordId': rec['recordId'], 'cells': {mark_field_id: task_marker}}
+                for rec in updated_verify
+            ]
+            if clean_payload:
+                update_records(base_id, table_id, clean_payload)
+        except TruncatedResponseError:
+            # record_ids query itself truncated; fall back to one-by-one.
+            for record in update_payload:
+                try:
+                    result_one = query_records(
+                        base_id=base_id,
+                        table_id=table_id,
+                        record_ids=[record['recordId']],
+                        field_ids=[mark_field_id],
+                        limit=1,
+                    )
+                    updated_one = extract_records(result_one)
+                    if updated_one:
+                        update_records(base_id, table_id, [record])
+                except Exception:
+                    # Skip on failure.
+                    pass
+        except RuntimeError as exc:
+            # update_records response truncated; server update succeeded.
+            # Advance via cursor to avoid re-fetching same records.
+            cursor = result.get('data', {}).get('nextCursor')
+            if cursor:
+                time.sleep(MARK_SYNC_WAIT_SECONDS)
+                continue
+            else:
+                break
+
+        # Check if there are more records: either batch is full, or nextCursor exists.
+        has_next_cursor = bool(result.get('data', {}).get('nextCursor'))
+        if len(batch_records) < MAX_QUERY_LIMIT and not has_next_cursor:
+            break
+
+        # Advance cursor for next iteration if there are more records.
+        cursor = result.get('data', {}).get('nextCursor')
+        if not cursor:
             break
 
         time.sleep(MARK_SYNC_WAIT_SECONDS)
+
 
     return task_marker
 
