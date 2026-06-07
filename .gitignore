@@ -3,4 +3,5 @@ __pycache__/
 .clawhub/
 
 # Local verification output dirs
+out_*/
 out_verify_*/
