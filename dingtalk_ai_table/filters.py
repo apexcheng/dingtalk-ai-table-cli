@@ -6,6 +6,14 @@ from .guards import ensure_resource_id, validate_date_string, validate_filter_tr
 MAX_DATE_RANGE_DAYS = 366
 
 
+def build_leaf_filter(operator: str, field_id: str, value: Any = None) -> Dict[str, Any]:
+    ensure_resource_id(field_id, 'fieldId')
+    operands = [field_id] if operator in {'exist', 'un_exist'} else [field_id, value]
+    filter_obj = {'operator': operator, 'operands': operands}
+    validate_filter_tree(filter_obj)
+    return filter_obj
+
+
 def eq_filter(field_id: str, value: Any) -> Dict[str, Any]:
     ensure_resource_id(field_id, 'fieldId')
     if value is None:
@@ -20,6 +28,15 @@ def ne_filter(field_id: str, value: Any) -> Dict[str, Any]:
     if value is None:
         raise ValueError('ne 过滤值不能为空')
     filter_obj = {'operator': 'ne', 'operands': [field_id, value]}
+    validate_filter_tree(filter_obj)
+    return filter_obj
+
+
+def contain_filter(field_id: str, value: Any) -> Dict[str, Any]:
+    ensure_resource_id(field_id, 'fieldId')
+    if value is None:
+        raise ValueError('contain filter value cannot be null')
+    filter_obj = {'operator': 'contain', 'operands': [field_id, value]}
     validate_filter_tree(filter_obj)
     return filter_obj
 

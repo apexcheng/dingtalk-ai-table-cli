@@ -9,18 +9,35 @@ MAX_FIELDS_PER_CREATE = 15
 MAX_TABLES_PER_GET = 10
 MAX_FIELDS_PER_GET = 10
 QUERY_MARK_FIELD_NAME = "查询标记"
-SUPPORTED_FILTER_OPERATORS = {"eq", "ne", "date_eq"}
+SUPPORTED_FILTER_OPERATORS = {
+    "eq",
+    "ne",
+    "exist",
+    "un_exist",
+    "lt",
+    "gt",
+    "lte",
+    "gte",
+    "contain",
+    "exclusive",
+    "all_of",
+    "any_of",
+    "none_of",
+    "date_eq",
+    "before",
+    "after",
+    "not_before",
+    "not_after",
+    "from_now",
+    "date_between",
+}
 RESOURCE_ID_PATTERN = r"^[A-Za-z0-9_-]{4,128}$"
 
 COMPOUND_FILTER_OPERATORS = {"and", "or"}
-FORBIDDEN_FILTER_OPERATORS = {
-    "gte",
-    "lte",
-    "greater_equal",
-    "less_than",
-    "is_after",
-    "is_before",
-}
+EXISTENCE_FILTER_OPERATORS = {"exist", "un_exist"}
+DATE_VALUE_FILTER_OPERATORS = {"date_eq", "before", "after", "not_before", "not_after"}
+DATE_RANGE_FILTER_OPERATORS = {"date_between"}
+FORBIDDEN_FILTER_OPERATORS = {"greater_equal", "less_than", "is_after", "is_before"}
 FORBIDDEN_QUERY_MARK_FIELD_NAMES = {
     "处理标记",
     "同步标记",
@@ -141,13 +158,25 @@ def _validate_filter_operands(operator: str, operands: Any) -> None:
             validate_filter_tree(operand)
         return
 
+    if operator in EXISTENCE_FILTER_OPERATORS:
+        if len(operands) != 1:
+            raise ValueError(f"{operator} 过滤条件必须包含 [fieldId]")
+        ensure_resource_id(operands[0], "fieldId")
+        return
+
     if len(operands) != 2:
         raise ValueError(f"{operator} 过滤条件必须包含 [fieldId, value]")
 
     field_id = ensure_resource_id(operands[0], "fieldId")
-    if operator == "date_eq":
-        validate_date_string(operands[1])
-    elif field_id and operands[1] is None:
+    value = operands[1]
+    if operator in DATE_VALUE_FILTER_OPERATORS:
+        validate_date_string(value)
+    elif operator in DATE_RANGE_FILTER_OPERATORS:
+        if not isinstance(value, list) or len(value) != 2:
+            raise ValueError(f"{operator} 过滤值必须是 [start, end]")
+        validate_date_string(value[0])
+        validate_date_string(value[1])
+    elif field_id and value is None:
         raise ValueError(f"{operator} 过滤值不能为 null")
 
 
@@ -166,7 +195,7 @@ def validate_filter_tree(filters: Any) -> Any:
     operator = filters.get("operator")
     if operator not in SUPPORTED_FILTER_OPERATORS and operator not in COMPOUND_FILTER_OPERATORS:
         if operator in FORBIDDEN_FILTER_OPERATORS:
-            raise ValueError(f"当前不支持 {operator} 过滤器，请改用 eq / ne / date_eq")
+            raise ValueError(f"当前不支持 {operator} 过滤器")
         raise ValueError(f"不支持的过滤器操作符: {operator}")
 
     operands = filters.get("operands")

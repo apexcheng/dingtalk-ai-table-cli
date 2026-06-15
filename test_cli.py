@@ -111,6 +111,80 @@ class TestCli(unittest.TestCase):
         self.assertTrue(payload["ok"])
         mocked.assert_called_once_with(query="评价", limit=20, cursor=None)
 
+    def test_build_filter_supports_contain(self):
+        exit_code, payload = self.run_cli([
+            "build-filter",
+            "--operator", "contain",
+            "--field-id", "fld_1",
+            "--value", "abc",
+        ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"], {
+            "operator": "contain",
+            "operands": ["fld_1", "abc"],
+        })
+
+    def test_build_filter_accepts_contains_alias(self):
+        exit_code, payload = self.run_cli([
+            "build-filter",
+            "--operator", "contains",
+            "--field-id", "fld_1",
+            "--value", "abc",
+        ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"], {
+            "operator": "contain",
+            "operands": ["fld_1", "abc"],
+        })
+
+    def test_build_filter_supports_exist(self):
+        exit_code, payload = self.run_cli([
+            "build-filter",
+            "--operator", "exist",
+            "--field-id", "fld_1",
+        ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"], {
+            "operator": "exist",
+            "operands": ["fld_1"],
+        })
+
+    def test_build_filter_supports_native_numeric_operator(self):
+        exit_code, payload = self.run_cli([
+            "build-filter",
+            "--operator", "gte",
+            "--field-id", "fld_1",
+            "--value", "10",
+        ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"], {
+            "operator": "gte",
+            "operands": ["fld_1", 10],
+        })
+
+    def test_build_filter_supports_date_between(self):
+        exit_code, payload = self.run_cli([
+            "build-filter",
+            "--operator", "date_between",
+            "--field-id", "fld_1",
+            "--value", '["2026-06-01","2026-06-05"]',
+        ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"], {
+            "operator": "date_between",
+            "operands": ["fld_1", ["2026-06-01", "2026-06-05"]],
+        })
+
     def test_query_records_with_output_only_returns_summary(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_path = Path(tmp_dir) / "records.jsonl"

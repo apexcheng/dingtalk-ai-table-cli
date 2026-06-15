@@ -10,7 +10,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from dingtalk_ai_table.fields import create_fields, fetch_light_field_ids, get_base, get_fields, get_tables, list_bases, search_bases
-from dingtalk_ai_table.filters import and_filter, date_eq_filter, eq_filter, iter_date_values, ne_filter, or_filter
+from dingtalk_ai_table.filters import and_filter, build_leaf_filter, date_eq_filter, iter_date_values, or_filter
 from dingtalk_ai_table.guards import validate_filter_tree
 from dingtalk_ai_table.records import extract_records
 from dingtalk_ai_table.skill_api import (
@@ -242,14 +242,38 @@ def build_filter_from_args(args: argparse.Namespace, data: Dict[str, Any]) -> Di
         return input_filter
 
     operator = require_value(pick_scalar(args.operator, data, "operator"), "operator")
-    if operator == "eq":
+    operator_aliases = {
+        "contains": "contain",
+        "not_contains": "exclusive",
+    }
+    operator = operator_aliases.get(operator, operator)
+    leaf_operators = {
+        "eq",
+        "ne",
+        "exist",
+        "un_exist",
+        "lt",
+        "gt",
+        "lte",
+        "gte",
+        "contain",
+        "exclusive",
+        "all_of",
+        "any_of",
+        "none_of",
+        "before",
+        "after",
+        "not_before",
+        "not_after",
+        "from_now",
+        "date_between",
+    }
+    if operator in leaf_operators:
         field_id = require_value(pick_scalar(args.field_id, data, "fieldId", "field_id"), "fieldId")
+        if operator in {"exist", "un_exist"}:
+            return build_leaf_filter(operator, field_id)
         value = parse_json_value(pick_scalar(args.value, data, "value"))
-        return eq_filter(field_id, value)
-    if operator == "ne":
-        field_id = require_value(pick_scalar(args.field_id, data, "fieldId", "field_id"), "fieldId")
-        value = parse_json_value(pick_scalar(args.value, data, "value"))
-        return ne_filter(field_id, value)
+        return build_leaf_filter(operator, field_id, value)
     if operator == "date_eq":
         field_id = require_value(pick_scalar(args.field_id, data, "fieldId", "field_id"), "fieldId")
         date_value = require_value(pick_scalar(args.value, data, "value", "dateValue", "date_value"), "dateValue")

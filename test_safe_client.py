@@ -17,7 +17,7 @@ from dingtalk_ai_table import (
     safe_query_records,
     safe_update_records,
 )
-from dingtalk_ai_table.filters import and_filter, date_eq_filter, eq_filter, iter_date_values, ne_filter, or_filter
+from dingtalk_ai_table.filters import and_filter, build_leaf_filter, contain_filter, date_eq_filter, eq_filter, iter_date_values, ne_filter, or_filter
 from dingtalk_ai_table.guards import (
     QUERY_MARK_FIELD_NAME,
     normalize_query_limit,
@@ -73,10 +73,16 @@ class TestFilters(unittest.TestCase):
     def test_supported_operators_allowed(self):
         validate_filter_tree(eq_filter('fld123456', 'in progress'))
         validate_filter_tree(ne_filter('fld123456', 'done'))
+        validate_filter_tree(contain_filter('fld123456', 'progress'))
+        validate_filter_tree(build_leaf_filter('exist', 'fld123456'))
+        validate_filter_tree(build_leaf_filter('gte', 'fld123456', 10))
+        validate_filter_tree(build_leaf_filter('any_of', 'fld123456', ['opt_a', 'opt_b']))
+        validate_filter_tree(build_leaf_filter('before', 'fld123456', '2026-06-05'))
+        validate_filter_tree(build_leaf_filter('date_between', 'fld123456', ['2026-06-01', '2026-06-05']))
         validate_filter_tree(date_eq_filter('fld123456', '2026-06-05'))
 
     def test_unsupported_operators_rejected(self):
-        for operator in ('gte', 'lte', 'is_after', 'is_before'):
+        for operator in ('greater_equal', 'less_than', 'is_after', 'is_before'):
             with self.subTest(operator=operator):
                 with self.assertRaisesRegex(ValueError, operator):
                     validate_filter_tree({'operator': operator, 'operands': ['fld123456', 'x']})
@@ -84,6 +90,14 @@ class TestFilters(unittest.TestCase):
     def test_invalid_date_eq_value_rejected(self):
         with self.assertRaisesRegex(ValueError, 'YYYY-MM-DD'):
             validate_filter_tree({'operator': 'date_eq', 'operands': ['fld123456', '2026/06/05']})
+
+    def test_exist_only_accepts_field_id_operand(self):
+        with self.assertRaisesRegex(ValueError, 'fieldId'):
+            validate_filter_tree({'operator': 'exist', 'operands': ['fld123456', 'extra']})
+
+    def test_invalid_date_between_value_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'start'):
+            validate_filter_tree({'operator': 'date_between', 'operands': ['fld123456', '2026-06-05']})
 
     def test_iter_date_values_only_returns_dates(self):
         self.assertEqual(iter_date_values('2026-06-05', '2026-06-07'), ['2026-06-05', '2026-06-06', '2026-06-07'])
@@ -163,6 +177,14 @@ class TestQueryFilterNormalization(unittest.TestCase):
         self.assertEqual(normalized, {
             'operator': 'and',
             'operands': [{'operator': 'ne', 'operands': ['fld123456', 'in progress']}],
+        })
+
+    def test_contain_leaf_is_wrapped_in_and(self):
+        leaf = contain_filter('fld123456', 'progress')
+        normalized = normalize_query_filters(leaf)
+        self.assertEqual(normalized, {
+            'operator': 'and',
+            'operands': [{'operator': 'contain', 'operands': ['fld123456', 'progress']}],
         })
 
     def test_existing_and_is_not_re_wrapped(self):

@@ -125,6 +125,11 @@ python scripts/aitable.py query-records --field-id fld_date --field-id fld_sku .
 search-bases / list-bases -> get-base -> resolve-table -> resolve-field -> build-filter -> query/process
 ```
 
+`build-filter` 支持原生筛选符：`eq` / `ne` / `exist` / `un_exist` / `lt` / `gt` /
+`lte` / `gte` / `contain` / `exclusive` / `all_of` / `any_of` / `none_of` /
+`date_eq` / `before` / `after` / `not_before` / `not_after` / `from_now` /
+`date_between`。
+
 ## 输出规则
 
 - `stdout` 只输出最终 JSON
@@ -144,5 +149,6 @@ python scripts/aitable.py list-bases --limit 20
 python scripts/aitable.py search-bases --query 评价 --limit 20
 python scripts/aitable.py resolve-table --base-id xxx --table-name 评价收集表
 python scripts/aitable.py resolve-field --base-id xxx --table-id xxx --field-name 日期
+python scripts/aitable.py build-filter --operator contain --field-id fld_xxx --value keyword
 python scripts/aitable.py query-records --input examples/query_records.json
 ```
