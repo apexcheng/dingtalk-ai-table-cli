@@ -1572,6 +1572,39 @@ class TestMarkerSortForbidden(unittest.TestCase):
         self.assertIn("process-records-with-marker 不支持 sort", payload["error"]["message"])
         mocked_process.assert_not_called()
 
+    def test_process_records_with_marker_rejects_simple_sort_field_id(self):
+        with patch.object(AITABLE_CLI, "process_records_with_marker") as mocked_process:
+            exit_code, payload = self.run_cli([
+                "process-records-with-marker",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+                "--filters-json", '{"operator":"eq","operands":["fld_status","open"]}',
+                "--output", "/tmp/sort_reject_simple.jsonl",
+                "--sort-field-id", "fld_date",
+            ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertIn("process-records-with-marker 不支持 sort", payload["error"]["message"])
+        mocked_process.assert_not_called()
+
+    def test_process_records_with_marker_rejects_simple_sort_field_name(self):
+        with patch.object(AITABLE_CLI, "resolve_field_id", return_value="fld_date"), \
+             patch.object(AITABLE_CLI, "process_records_with_marker") as mocked_process:
+            exit_code, payload = self.run_cli([
+                "process-records-with-marker",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+                "--filters-json", '{"operator":"eq","operands":["fld_status","open"]}',
+                "--output", "/tmp/sort_reject_simple_name.jsonl",
+                "--sort-field-name", "创建时间",
+            ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertIn("process-records-with-marker 不支持 sort", payload["error"]["message"])
+        mocked_process.assert_not_called()
+
     def test_process_date_range_with_marker_rejects_cli_sort_json(self):
         with patch.object(AITABLE_CLI, "process_records_with_marker") as mocked_process:
             exit_code, payload = self.run_cli([
@@ -1608,6 +1641,43 @@ class TestMarkerSortForbidden(unittest.TestCase):
                     "--output-dir", "/tmp/sort_reject_test2",
                     "--input", str(input_path),
                 ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertIn("process-date-range-with-marker 不支持 sort", payload["error"]["message"])
+        mocked_process.assert_not_called()
+
+    def test_process_date_range_with_marker_rejects_simple_sort_field_id(self):
+        with patch.object(AITABLE_CLI, "process_records_with_marker") as mocked_process:
+            exit_code, payload = self.run_cli([
+                "process-date-range-with-marker",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+                "--date-field-id", "fld_date",
+                "--start-date", "2026-06-01",
+                "--end-date", "2026-06-01",
+                "--output-dir", "/tmp/sort_reject_date_simple",
+                "--sort-field-id", "fld_date",
+            ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertIn("process-date-range-with-marker 不支持 sort", payload["error"]["message"])
+        mocked_process.assert_not_called()
+
+    def test_process_date_range_with_marker_rejects_simple_sort_field_name(self):
+        with patch.object(AITABLE_CLI, "resolve_field_id", return_value="fld_date"), \
+             patch.object(AITABLE_CLI, "process_records_with_marker") as mocked_process:
+            exit_code, payload = self.run_cli([
+                "process-date-range-with-marker",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+                "--date-field-id", "fld_date",
+                "--start-date", "2026-06-01",
+                "--end-date", "2026-06-01",
+                "--output-dir", "/tmp/sort_reject_date_simple_name",
+                "--sort-field-name", "创建时间",
+            ])
 
         self.assertEqual(exit_code, 1)
         self.assertFalse(payload["ok"])

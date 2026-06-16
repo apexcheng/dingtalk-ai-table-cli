@@ -645,6 +645,8 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
     sort = pick_scalar(args.sort_json, data, "sort")
     if isinstance(sort, str):
         sort = parse_json_text(sort, "--sort-json")
+    if sort is None:
+        sort = build_simple_sort_from_query_args(args, data, base_id, table_id)
     if sort is not None:
         raise CliError(
             "process-records-with-marker 不支持 sort。"
@@ -743,6 +745,8 @@ def handle_process_date_range_with_marker(args: argparse.Namespace) -> Any:
     sort = pick_scalar(args.sort_json, data, "sort")
     if isinstance(sort, str):
         sort = parse_json_text(sort, "--sort-json")
+    if sort is None:
+        sort = build_simple_sort_from_query_args(args, data, base_id, table_id)
     if sort is not None:
         raise CliError(
             "process-date-range-with-marker 不支持 sort。"
