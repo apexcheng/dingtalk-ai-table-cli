@@ -1,7 +1,7 @@
 ---
 name: dingtalk-ai-table-cli
 description: Agent-first safe DingTalk AI Table access via scripts/aitable.py CLI.
-version: 1.2.1
+version: 1.2.2
 metadata:
   author: Marila@Dingtalk
   category: productivity
