@@ -1,7 +1,7 @@
 ---
 name: dingtalk-ai-table-cli
 description: Agent-first safe DingTalk AI Table access via scripts/aitable.py CLI.
-version: 1.2.2
+version: 1.2.3
 metadata:
   author: Marila@Dingtalk
   category: productivity
@@ -120,6 +120,8 @@ python scripts/aitable.py query-records --field-name 日期 --field-name SKU ...
 | 根据字段名获取字段 ID | `resolve-field` |
 | 根据单选 / 多选名称获取选项 ID | `resolve-option` |
 | 构造筛选条件 | `build-filter` |
+| 统计分组聚合 | `query-stats` |
+| 统计记录聚合 | `query-records-stats` |
 | 读取少量数据，单次最多 100 条 | `query-records` |
 | 读取带 `filters` 的大量数据 | `query-records + cursor` 或 `process-records-with-marker` |
 | 读取带 `sort` 的大量数据 | 不要用 cursor；必要时人工拆分条件 |
@@ -128,6 +130,7 @@ python scripts/aitable.py query-records --field-name 日期 --field-name SKU ...
 | 修改记录 | `update-records` |
 | 删除已知 recordId 的记录 | `delete-records` |
 | 准备附件上传参数 | `prepare-attachment-upload` |
+| 服务端导出文件 | `export-data` |
 
 ## 表查询规则
 
@@ -165,6 +168,8 @@ search-bases / list-bases -> get-base -> query-records --table-name/--field-name
 - `resolve-field`
 - `resolve-option`
 - `build-filter`
+- `query-stats`
+- `query-records-stats`
 - `query-records`
 - `create-records`
 - `update-records`
@@ -172,6 +177,7 @@ search-bases / list-bases -> get-base -> query-records --table-name/--field-name
 - `process-records-with-marker`
 - `process-date-range-with-marker`
 - `prepare-attachment-upload`
+- `export-data`
 
 ## 常用模板
 
@@ -184,6 +190,8 @@ python scripts/aitable.py resolve-field --base-id xxx --table-id xxx --field-nam
 python scripts/aitable.py resolve-option --base-id xxx --table-id xxx --field-name 状态 --option-name 进行中
 python scripts/aitable.py build-filter --operator eq --field-id fld_xxx --value 进行中
 python scripts/aitable.py build-filter --operator contain --field-id fld_xxx --value keyword
+python scripts/aitable.py query-stats --base-id xxx --table-name 评价收集表 --stats '{"fieldId":"fld_xxx","statsType":"count"}'
+python scripts/aitable.py query-records-stats --base-id xxx --table-name 评价收集表 --stats '{"fieldId":"fld_xxx","statsType":"COUNT"}'
 python scripts/aitable.py query-records --base-id xxx --table-name 评价收集表 --field-name 日期 --filter-field-name 状态 --filter-operator eq --filter-value 进行中
 python scripts/aitable.py query-records --input examples/query_records.json
 python scripts/aitable.py create-records --input examples/create_records.json
@@ -192,4 +200,5 @@ python scripts/aitable.py delete-records --input examples/delete_records.json
 python scripts/aitable.py process-records-with-marker --input examples/process_records_with_marker.json
 python scripts/aitable.py process-date-range-with-marker --input examples/process_date_range_with_marker.json
 python scripts/aitable.py prepare-attachment-upload --input examples/prepare_attachment_upload.json
+python scripts/aitable.py export-data --base-id xxx --scope table --table-id xxx --format excel
 ```

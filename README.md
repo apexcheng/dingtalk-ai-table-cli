@@ -98,6 +98,8 @@ python scripts/aitable.py query-records --field-name 日期 --field-name SKU ...
 - `resolve-field`
 - `resolve-option`
 - `build-filter`
+- `query-stats`
+- `query-records-stats`
 - `query-records`
 - `create-records`
 - `update-records`
@@ -105,6 +107,7 @@ python scripts/aitable.py query-records --field-name 日期 --field-name SKU ...
 - `process-records-with-marker`
 - `process-date-range-with-marker`
 - `prepare-attachment-upload`
+- `export-data`
 
 ## 表查询说明
 
@@ -136,6 +139,8 @@ search-bases / list-bases -> get-base -> query-records --table-name/--field-name
 - 失败时也输出 JSON，包含 `ok=false`、`command`、`error.type`、`error.message`
 - `query-records` 默认只输出摘要和最多 `3` 条 `preview`
 - `query-records --output <file>` 时，完整 records 写入 JSONL 文件
+- 统计数量 / 聚合优先使用 `query-stats` 或 `query-records-stats`
+- 服务端文件导出使用 `export-data`；若返回 `taskId` 且状态为 pending，用同一个 `taskId` 再次调用继续等待
 - 日期统计场景优先使用 `process-date-range-with-marker`，并读取 `summary.recordCount`
 - `process-records-with-marker` 必须传 `--output`
 - `process-date-range-with-marker` 必须传 `--output-dir`
@@ -150,7 +155,10 @@ python scripts/aitable.py search-bases --query 评价 --limit 20
 python scripts/aitable.py resolve-table --base-id xxx --table-name 评价收集表
 python scripts/aitable.py resolve-field --base-id xxx --table-id xxx --field-name 日期
 python scripts/aitable.py build-filter --operator contain --field-id fld_xxx --value keyword
+python scripts/aitable.py query-stats --base-id xxx --table-name 评价收集表 --stats '{"fieldId":"fld_xxx","statsType":"count"}'
+python scripts/aitable.py query-records-stats --base-id xxx --table-name 评价收集表 --stats '{"fieldId":"fld_xxx","statsType":"COUNT"}'
 python scripts/aitable.py query-records --base-id xxx --table-name 评价收集表 --field-name 日期 --filter-field-name 状态 --filter-operator eq --filter-value 进行中
 python scripts/aitable.py process-records-with-marker --base-id xxx --table-name 评价收集表 --filters-json '{"operator":"eq","operands":["fld_status","进行中"]}' --output out/process.jsonl
+python scripts/aitable.py export-data --base-id xxx --scope table --table-id xxx --format excel
 python scripts/aitable.py query-records --input examples/query_records.json
 ```

@@ -1,9 +1,11 @@
 from typing import Any, Callable, Dict, List, Optional
 
 from .attachments import prepare_attachment_upload
+from .exports import export_data
 from .fields import get_field_id_by_name, get_option_id_by_name, get_table_by_name
 from .markers import query_date_range_with_marker, query_with_marker
 from .records import create_records, delete_records, query_records, update_records
+from .stats import query_records_stats, query_stats
 
 def resolve_field_id(base_id: str, table_id: str, field_name: str) -> str:
     """
@@ -61,6 +63,52 @@ def safe_query_records(
         field_ids=field_ids,
         limit=limit,
         cursor=cursor,
+    )
+
+
+def safe_query_stats(
+    base_id: str,
+    table_id: str,
+    stats: Any,
+    filters: Optional[Dict[str, Any]] = None,
+    group: Optional[str] = None,
+    sort_dsl: Optional[str] = None,
+    limit: Optional[int] = None,
+    data_version: Optional[str] = None,
+) -> Any:
+    return query_stats(
+        base_id=base_id,
+        table_id=table_id,
+        stats=stats,
+        filters=filters,
+        group=group,
+        sort_dsl=sort_dsl,
+        limit=limit,
+        data_version=data_version,
+    )
+
+
+def safe_query_records_stats(
+    base_id: str,
+    table_id: str,
+    stats: Any,
+    filters: Optional[Dict[str, Any]] = None,
+    sort: Optional[str] = None,
+    keyword: Optional[str] = None,
+    limit: Optional[int] = None,
+    data_version: Optional[str] = None,
+    search_field_ids: Optional[Any] = None,
+) -> Any:
+    return query_records_stats(
+        base_id=base_id,
+        table_id=table_id,
+        stats=stats,
+        filters=filters,
+        sort=sort,
+        keyword=keyword,
+        limit=limit,
+        data_version=data_version,
+        search_field_ids=search_field_ids,
     )
 
 
@@ -137,3 +185,23 @@ def safe_prepare_attachment_upload(
     mime_type: Optional[str] = None,
 ) -> Any:
     return prepare_attachment_upload(base_id, file_name, size, mime_type)
+
+
+def safe_export_data(
+    base_id: str,
+    scope: Optional[str] = None,
+    export_format: Optional[str] = None,
+    table_id: Optional[str] = None,
+    view_id: Optional[str] = None,
+    task_id: Optional[str] = None,
+    timeout_ms: Optional[int] = None,
+) -> Any:
+    return export_data(
+        base_id=base_id,
+        scope=scope,
+        export_format=export_format,
+        table_id=table_id,
+        view_id=view_id,
+        task_id=task_id,
+        timeout_ms=timeout_ms,
+    )

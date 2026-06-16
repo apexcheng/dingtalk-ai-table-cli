@@ -13,6 +13,7 @@ from dingtalk_ai_table import (
     resolve_option_id,
     safe_create_records,
     safe_delete_records,
+    safe_export_data,
     safe_prepare_attachment_upload,
     safe_query_records,
     safe_update_records,
@@ -37,6 +38,7 @@ class TestPublicEntryPoints(unittest.TestCase):
         self.assertTrue(callable(safe_create_records))
         self.assertTrue(callable(safe_update_records))
         self.assertTrue(callable(safe_delete_records))
+        self.assertTrue(callable(safe_export_data))
         self.assertTrue(callable(process_records_with_marker))
         self.assertTrue(callable(process_date_range_with_marker))
         self.assertTrue(callable(safe_prepare_attachment_upload))
@@ -448,6 +450,18 @@ class TestQueryMarker(unittest.TestCase):
         second_call = mocked_update.call_args_list[1].args[2]
         self.assertEqual([item['recordId'] for item in first_call], ['rec12345'])
         self.assertEqual([item['recordId'] for item in second_call], ['rec67890'])
+
+    def test_safe_export_data_accepts_task_id_with_equals(self):
+        with patch('dingtalk_ai_table.exports.run_mcporter', return_value={'status': 'success'}) as mocked:
+            result = safe_export_data(
+                base_id='base12345',
+                task_id='Export-abc==',
+            )
+
+        self.assertEqual(result, {'status': 'success'})
+        mocked.assert_called_once()
+        payload = json.loads(mocked.call_args.args[0][2])
+        self.assertEqual(payload['taskId'], 'Export-abc==')
 
 
 if __name__ == '__main__':

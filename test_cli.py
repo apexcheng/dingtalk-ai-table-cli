@@ -51,6 +51,8 @@ class TestCli(unittest.TestCase):
             ("resolve-field", ["--base-id", "base12345", "--table-id", "tbl_1", "--field-name", "状态"], "handle_resolve_field"),
             ("resolve-option", ["--base-id", "base12345", "--table-id", "tbl_1", "--field-name", "状态", "--option-name", "进行中"], "handle_resolve_option"),
             ("build-filter", ["--operator", "eq", "--field-id", "fld_1", "--value", "1"], "handle_build_filter"),
+            ("query-stats", ["--base-id", "base12345", "--table-id", "tbl_1", "--stats", '{"fieldId":"fld_1","statsType":"count"}'], "handle_query_stats"),
+            ("query-records-stats", ["--base-id", "base12345", "--table-id", "tbl_1", "--stats", '{"fieldId":"fld_1","statsType":"COUNT"}'], "handle_query_records_stats"),
             ("query-records", ["--base-id", "base12345", "--table-id", "tbl_1", "--output", "out/query.jsonl"], "handle_query_records"),
             ("create-records", ["--base-id", "base12345", "--table-id", "tbl_1", "--record", '{"cells":{"fld_1":"张三"}}'], "handle_create_records"),
             ("update-records", ["--base-id", "base12345", "--table-id", "tbl_1", "--record", '{"recordId":"rec_1","cells":{"fld_1":"李四"}}'], "handle_update_records"),
@@ -58,6 +60,7 @@ class TestCli(unittest.TestCase):
             ("process-records-with-marker", ["--base-id", "base12345", "--table-id", "tbl_1", "--output", "out/process.jsonl"], "handle_process_records_with_marker"),
             ("process-date-range-with-marker", ["--base-id", "base12345", "--table-id", "tbl_1", "--date-field-id", "fld_date", "--start-date", "2026-06-01", "--end-date", "2026-06-02", "--output-dir", "out/daily"], "handle_process_date_range_with_marker"),
             ("prepare-attachment-upload", ["--base-id", "base12345", "--file-name", "example.png", "--size", "12345"], "handle_prepare_attachment_upload"),
+            ("export-data", ["--base-id", "base12345", "--scope", "table", "--table-id", "tbl_1", "--format", "excel"], "handle_export_data"),
         ]
 
         for command, argv_tail, handler_name in cases:
@@ -272,6 +275,119 @@ class TestCli(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["result"]["warning"], mock_result["warning"])
+
+    def test_query_stats_passes_stats_filters_and_table_name(self):
+        stats = {"fieldId": "fld_1", "statsType": "count"}
+        filters = {"operator": "exist", "operands": ["fld_1"]}
+        with patch.object(AITABLE_CLI, "resolve_table", return_value={"tableId": "tbl_resolved"}), \
+                patch.object(AITABLE_CLI, "safe_query_stats", return_value={"data": {"results": []}}) as mocked:
+            exit_code, payload = self.run_cli([
+                "query-stats",
+                "--base-id", "base12345",
+                "--table-name", "订单表",
+                "--stats", json.dumps(stats),
+                "--filters-json", json.dumps(filters),
+                "--limit", "10",
+                "--group", '[{"fieldId":"fld_1"}]',
+                "--sort-dsl", '[{"fieldId":"fld_1","direction":"ASC"}]',
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked.assert_called_once_with(
+            base_id="base12345",
+            table_id="tbl_resolved",
+            stats=[stats],
+            filters=filters,
+            group='[{"fieldId":"fld_1"}]',
+            sort_dsl='[{"fieldId":"fld_1","direction":"ASC"}]',
+            limit=10,
+            data_version=None,
+        )
+
+    def test_query_stats_requires_stats(self):
+        exit_code, payload = self.run_cli([
+            "query-stats",
+            "--base-id", "base12345",
+            "--table-id", "tbl_1",
+        ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertIn("stats 不能为空", payload["error"]["message"])
+
+    def test_query_records_stats_passes_optional_args(self):
+        stats = {"fieldId": "fld_1", "statsType": "COUNT"}
+        filters = {"operator": "exist", "operands": ["fld_1"]}
+        with patch.object(AITABLE_CLI, "safe_query_records_stats", return_value={"data": {"results": []}}) as mocked:
+            exit_code, payload = self.run_cli([
+                "query-records-stats",
+                "--base-id", "base12345",
+                "--table-id", "tbl_1",
+                "--stats", json.dumps(stats),
+                "--filters-json", json.dumps(filters),
+                "--sort", '[{"fieldId":"fld_1","direction":"ASC"}]',
+                "--keyword", "abc",
+                "--limit", "20",
+                "--search-field-id", "fld_1",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked.assert_called_once_with(
+            base_id="base12345",
+            table_id="tbl_1",
+            stats=[stats],
+            filters=filters,
+            sort='[{"fieldId":"fld_1","direction":"ASC"}]',
+            keyword="abc",
+            limit=20,
+            data_version=None,
+            search_field_ids=["fld_1"],
+        )
+
+    def test_export_data_creates_task(self):
+        with patch.object(AITABLE_CLI, "safe_export_data", return_value={"data": {"status": "pending"}}) as mocked:
+            exit_code, payload = self.run_cli([
+                "export-data",
+                "--base-id", "base12345",
+                "--scope", "table",
+                "--table-id", "tbl_1",
+                "--format", "excel",
+                "--timeout-ms", "200",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked.assert_called_once_with(
+            base_id="base12345",
+            scope="table",
+            export_format="excel",
+            table_id="tbl_1",
+            view_id=None,
+            task_id=None,
+            timeout_ms=200,
+        )
+
+    def test_export_data_continues_task(self):
+        with patch.object(AITABLE_CLI, "safe_export_data", return_value={"data": {"status": "success"}}) as mocked:
+            exit_code, payload = self.run_cli([
+                "export-data",
+                "--base-id", "base12345",
+                "--task-id", "Export-abc==",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked.assert_called_once_with(
+            base_id="base12345",
+            scope=None,
+            export_format=None,
+            table_id=None,
+            view_id=None,
+            task_id="Export-abc==",
+            timeout_ms=None,
+        )
 
     def test_parse_json_value_handles_non_string_values(self):
         cases = [

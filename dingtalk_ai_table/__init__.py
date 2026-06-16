@@ -9,8 +9,11 @@ from .skill_api import (
     resolve_option_id,
     safe_create_records,
     safe_delete_records,
+    safe_export_data,
     safe_prepare_attachment_upload,
+    safe_query_records_stats,
     safe_query_records,
+    safe_query_stats,
     safe_update_records,
 )
 
@@ -18,10 +21,13 @@ __all__ = [
     'resolve_field_id',
     'resolve_option_id',
     'safe_query_records',
+    'safe_query_stats',
+    'safe_query_records_stats',
     'safe_create_records',
     'safe_update_records',
     'safe_delete_records',
     'process_records_with_marker',
     'process_date_range_with_marker',
     'safe_prepare_attachment_upload',
+    'safe_export_data',
 ]

@@ -20,8 +20,11 @@ from dingtalk_ai_table.skill_api import (
     resolve_option_id,
     safe_create_records,
     safe_delete_records,
+    safe_export_data,
     safe_prepare_attachment_upload,
+    safe_query_records_stats,
     safe_query_records,
+    safe_query_stats,
     safe_update_records,
 )
 
@@ -69,7 +72,7 @@ def load_input_data(input_path: Optional[str]) -> Any:
     if not path.is_absolute():
         path = Path.cwd() / path
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8-sig"))
     except FileNotFoundError as exc:
         raise CliError(f"--input 文件不存在: {path}") from exc
     except json.JSONDecodeError as exc:
@@ -858,6 +861,69 @@ def handle_prepare_attachment_upload(args: argparse.Namespace) -> Any:
     )
 
 
+def pick_filters_arg(args: argparse.Namespace, data: Dict[str, Any]) -> Any:
+    filters = getattr(args, "filters_json", None)
+    if filters is None:
+        filters = data.get("filter") or data.get("filters")
+    if isinstance(filters, str):
+        filters = parse_json_text(filters, "--filters-json")
+    return filters
+
+
+def pick_stats_arg(args: argparse.Namespace, data: Dict[str, Any]) -> Any:
+    stats = pick_list(getattr(args, "stats", None), data, "stats")
+    if getattr(args, "stats", None) is not None:
+        stats = [parse_json_text(item, "--stats") for item in args.stats]
+    return require_value(stats, "stats")
+
+
+def handle_query_stats(args: argparse.Namespace) -> Any:
+    data = ensure_dict_input(load_input_data(args.input))
+    base_id = require_value(pick_scalar(args.base_id, data, "baseId", "base_id"), "baseId")
+    table_id = resolve_table_id_from_args(args, data, base_id)
+    return safe_query_stats(
+        base_id=base_id,
+        table_id=table_id,
+        stats=pick_stats_arg(args, data),
+        filters=pick_filters_arg(args, data),
+        group=pick_scalar(args.group, data, "group"),
+        sort_dsl=pick_scalar(args.sort_dsl, data, "sortDsl", "sort_dsl"),
+        limit=pick_scalar(args.limit, data, "limit"),
+        data_version=pick_scalar(args.data_version, data, "dataVersion", "data_version"),
+    )
+
+
+def handle_query_records_stats(args: argparse.Namespace) -> Any:
+    data = ensure_dict_input(load_input_data(args.input))
+    base_id = require_value(pick_scalar(args.base_id, data, "baseId", "base_id"), "baseId")
+    table_id = resolve_table_id_from_args(args, data, base_id)
+    return safe_query_records_stats(
+        base_id=base_id,
+        table_id=table_id,
+        stats=pick_stats_arg(args, data),
+        filters=pick_filters_arg(args, data),
+        sort=pick_scalar(args.sort, data, "sort"),
+        keyword=pick_scalar(args.keyword, data, "keyword"),
+        limit=pick_scalar(args.limit, data, "limit"),
+        data_version=pick_scalar(args.data_version, data, "dataVersion", "data_version"),
+        search_field_ids=pick_list(args.search_field_id, data, "searchFieldIds", "search_field_ids"),
+    )
+
+
+def handle_export_data(args: argparse.Namespace) -> Any:
+    data = ensure_dict_input(load_input_data(args.input))
+    base_id = require_value(pick_scalar(args.base_id, data, "baseId", "base_id"), "baseId")
+    return safe_export_data(
+        base_id=base_id,
+        scope=pick_scalar(args.scope, data, "scope"),
+        export_format=pick_scalar(args.format, data, "format"),
+        table_id=pick_scalar(args.table_id, data, "tableId", "table_id"),
+        view_id=pick_scalar(args.view_id, data, "viewId", "view_id"),
+        task_id=pick_scalar(args.task_id, data, "taskId", "task_id"),
+        timeout_ms=pick_scalar(args.timeout_ms, data, "timeoutMs", "timeout_ms"),
+    )
+
+
 def add_common_input_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--input", help="JSON 输入文件路径")
 
@@ -899,6 +965,31 @@ def add_process_arguments(parser: argparse.ArgumentParser) -> None:
         help="导出/更新/删除的批处理动作，推荐 export-with-marker",
     )
     parser.add_argument("--update-cells-json", help="action=update 时传入 cells JSON")
+
+
+def add_query_stats_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--stats", action="append", default=None, help="单个 stats JSON")
+    parser.add_argument("--group")
+    parser.add_argument("--sort-dsl")
+    parser.add_argument("--limit", type=int)
+    parser.add_argument("--data-version")
+
+
+def add_query_records_stats_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--stats", action="append", default=None, help="单个 stats JSON")
+    parser.add_argument("--sort")
+    parser.add_argument("--limit", type=int)
+    parser.add_argument("--data-version")
+    parser.add_argument("--keyword")
+    parser.add_argument("--search-field-id", action="append", default=None)
+
+
+def add_export_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--scope")
+    parser.add_argument("--format")
+    parser.add_argument("--view-id")
+    parser.add_argument("--task-id")
+    parser.add_argument("--timeout-ms", type=int)
 
 
 def build_parser() -> JsonArgumentParser:
@@ -1034,6 +1125,32 @@ def build_parser() -> JsonArgumentParser:
     build_filter_parser.add_argument("--operand", action="append", default=None, help="单个 operand JSON")
     build_filter_parser.set_defaults(handler=handle_build_filter)
 
+    query_stats_parser = subparsers.add_parser(
+        "query-stats",
+        help="按条件统计聚合",
+        description="Query grouped stats for a table.",
+        formatter_class=HelpFormatter,
+    )
+    add_common_input_argument(query_stats_parser)
+    add_base_table_arguments(query_stats_parser)
+    query_stats_parser.add_argument("--table-name", help="表名，未传 --table-id 时自动解析 tableId")
+    query_stats_parser.add_argument("--filters-json", help="高级用法：filters JSON 字符串")
+    add_query_stats_arguments(query_stats_parser)
+    query_stats_parser.set_defaults(handler=handle_query_stats)
+
+    query_records_stats_parser = subparsers.add_parser(
+        "query-records-stats",
+        help="对记录做统计",
+        description="Query aggregate stats for table records.",
+        formatter_class=HelpFormatter,
+    )
+    add_common_input_argument(query_records_stats_parser)
+    add_base_table_arguments(query_records_stats_parser)
+    query_records_stats_parser.add_argument("--table-name", help="表名，未传 --table-id 时自动解析 tableId")
+    query_records_stats_parser.add_argument("--filters-json", help="高级用法：filters JSON 字符串")
+    add_query_records_stats_arguments(query_records_stats_parser)
+    query_records_stats_parser.set_defaults(handler=handle_query_records_stats)
+
     query_records_parser = subparsers.add_parser(
         "query-records",
         help="查询记录（单次最多100条；filters+cursor 允许，sort+cursor 禁用）",
@@ -1124,6 +1241,18 @@ def build_parser() -> JsonArgumentParser:
     prepare_attachment_parser.add_argument("--size", type=int)
     prepare_attachment_parser.add_argument("--mime-type")
     prepare_attachment_parser.set_defaults(handler=handle_prepare_attachment_upload)
+
+    export_data_parser = subparsers.add_parser(
+        "export-data",
+        help="导出数据",
+        description="Create or continue an export task.",
+        formatter_class=HelpFormatter,
+    )
+    add_common_input_argument(export_data_parser)
+    export_data_parser.add_argument("--base-id")
+    export_data_parser.add_argument("--table-id")
+    add_export_arguments(export_data_parser)
+    export_data_parser.set_defaults(handler=handle_export_data)
 
     return parser
 
