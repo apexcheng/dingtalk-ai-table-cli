@@ -15,6 +15,25 @@ from .guards import (
 JsonValue = Optional[Union[str, int, float, bool, list, dict]]
 
 
+def build_query_limit_attempts(query_limit: int) -> List[int]:
+    attempts = [query_limit, query_limit]
+    for fallback_limit in (50, 20):
+        if fallback_limit < query_limit and fallback_limit not in attempts:
+            attempts.append(fallback_limit)
+    return attempts
+
+
+def add_query_limit_warning(result: Any, original_limit: int, final_limit: int) -> Any:
+    if final_limit >= original_limit or not isinstance(result, dict):
+        return result
+    result = dict(result)
+    result['warning'] = (
+        f'原 limit={original_limit} 的响应过大被截断，'
+        f'已自动降级为 limit={final_limit}。结果不是完整的 {original_limit} 条。'
+    )
+    return result
+
+
 def sanitize_record_value(value: Any) -> JsonValue:
     if value is None:
         return None
@@ -173,14 +192,21 @@ def query_records(
     if cursor is not None:
         payload['cursor'] = cursor
 
-    try:
-        return run_mcporter(['query_records', '--args', json.dumps(payload, ensure_ascii=False)])
-    except TruncatedResponseError as exc:
-        if exc.suggested_limit and query_limit > exc.suggested_limit:
-            # Retry with a smaller limit to avoid pipe buffer truncation.
-            payload['limit'] = exc.suggested_limit
-            return run_mcporter(['query_records', '--args', json.dumps(payload, ensure_ascii=False)])
-        raise
+    attempts = build_query_limit_attempts(query_limit)
+    last_exc = None
+    for attempt_limit in attempts:
+        payload['limit'] = attempt_limit
+        try:
+            result = run_mcporter(['query_records', '--args', json.dumps(payload, ensure_ascii=False)])
+            return add_query_limit_warning(result, query_limit, attempt_limit)
+        except TruncatedResponseError as exc:
+            last_exc = exc
+            continue
+
+    raise RuntimeError(
+        f'query_records 响应过大被截断，已按 limit={attempts} 重试仍失败；'
+        f'请减少 limit 或 fieldIds。最后错误: {last_exc}'
+    )
 
 
 def create_records(base_id: str, table_id: str, records: List[Dict[str, Any]]) -> Any:

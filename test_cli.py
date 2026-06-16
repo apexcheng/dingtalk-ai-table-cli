@@ -264,6 +264,64 @@ class TestCli(unittest.TestCase):
         self.assertEqual(payload["result"]["summary"]["action"], "export-with-marker")
         self.assertEqual(payload["result"]["taskMarker"], "task_marker_1")
 
+    def test_process_records_export_with_marker_skips_existing_record_ids(self):
+        def fake_process_records_with_marker(**kwargs):
+            kwargs["process_batch"]([
+                {"recordId": "rec_1", "cells": {"fld_1": "old"}},
+                {"id": "rec_2", "cells": {"fld_1": "new"}},
+            ])
+            return "task_marker_dedupe"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "process.jsonl"
+            output_path.write_text(
+                '{"recordId":"rec_1","cells":{"fld_1":"exists"}}\n'
+                '\n'
+                '{bad json}\n',
+                encoding="utf-8",
+            )
+
+            with patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker):
+                exit_code, payload = self.run_cli([
+                    "process-records-with-marker",
+                    "--base-id", "base12345",
+                    "--table-id", "table12345",
+                    "--filters-json", '{"operator":"eq","operands":["fld_1","a"]}',
+                    "--output", str(output_path),
+                ])
+
+            lines = output_path.read_text(encoding="utf-8").splitlines()
+            json_lines = [json.loads(line) for line in lines if line and line != "{bad json}"]
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["summary"]["processedCount"], 2)
+        self.assertEqual(payload["result"]["summary"]["exportedCount"], 1)
+        self.assertEqual(payload["result"]["summary"]["skippedDuplicateCount"], 1)
+        self.assertEqual([record["recordId"] for record in json_lines], ["rec_1", "rec_2"])
+        self.assertEqual(json_lines[1]["recordId"], "rec_2")
+
+    def test_process_records_export_with_marker_marker_failure_mentions_dedupe(self):
+        def fake_process_records_with_marker(**kwargs):
+            kwargs["process_batch"]([{"recordId": "rec_1", "cells": {"fld_1": "a"}}])
+            raise RuntimeError("marker write failed")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "process.jsonl"
+            with patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker):
+                exit_code, payload = self.run_cli([
+                    "process-records-with-marker",
+                    "--base-id", "base12345",
+                    "--table-id", "table12345",
+                    "--filters-json", '{"operator":"eq","operands":["fld_1","a"]}',
+                    "--output", str(output_path),
+                ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertIn("本批可能已处理但标记失败", payload["error"]["message"])
+        self.assertIn("recordId 去重", payload["error"]["message"])
+
     def test_process_records_input_update_action_can_take_effect(self):
         def fake_process_records_with_marker(**kwargs):
             kwargs["process_batch"]([{"recordId": "rec_1", "cells": {"fld_1": "a"}}])
@@ -439,6 +497,133 @@ class TestCli(unittest.TestCase):
         self.assertFalse(payload["ok"])
         self.assertEqual(payload["error"]["type"], "ValueError")
         self.assertEqual(payload["error"]["message"], "找到多个同名表，请人工确认")
+
+    def test_process_records_with_marker_resolves_table_name(self):
+        def fake_process_records_with_marker(**kwargs):
+            kwargs["process_batch"]([])
+            return "task_marker_table_name"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "process.jsonl"
+            with patch.object(AITABLE_CLI, "resolve_table", return_value={"tableId": "tbl_resolved"}) as mocked_resolve, \
+                 patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker) as mocked_process:
+                exit_code, payload = self.run_cli([
+                    "process-records-with-marker",
+                    "--base-id", "base12345",
+                    "--table-name", "订单表",
+                    "--filters-json", '{"operator":"eq","operands":["fld_1","a"]}',
+                    "--output", str(output_path),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked_resolve.assert_called_once_with(base_id="base12345", table_name="订单表")
+        _, kwargs = mocked_process.call_args
+        self.assertEqual(kwargs["table_id"], "tbl_resolved")
+
+    def test_process_records_with_marker_prefers_table_id_over_table_name(self):
+        def fake_process_records_with_marker(**kwargs):
+            kwargs["process_batch"]([])
+            return "task_marker_table_id"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "process.jsonl"
+            with patch.object(AITABLE_CLI, "resolve_table") as mocked_resolve, \
+                 patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker) as mocked_process:
+                exit_code, payload = self.run_cli([
+                    "process-records-with-marker",
+                    "--base-id", "base12345",
+                    "--table-id", "table12345",
+                    "--table-name", "订单表",
+                    "--filters-json", '{"operator":"eq","operands":["fld_1","a"]}',
+                    "--output", str(output_path),
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked_resolve.assert_not_called()
+        _, kwargs = mocked_process.call_args
+        self.assertEqual(kwargs["table_id"], "table12345")
+
+    def test_process_records_with_marker_requires_table_id_or_table_name(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "process.jsonl"
+            exit_code, payload = self.run_cli([
+                "process-records-with-marker",
+                "--base-id", "base12345",
+                "--filters-json", '{"operator":"eq","operands":["fld_1","a"]}',
+                "--output", str(output_path),
+            ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["type"], "CliError")
+        self.assertIn("必须提供 --table-id 或 --table-name", payload["error"]["message"])
+
+    def test_process_date_range_with_marker_resolves_table_name(self):
+        def fake_process_records_with_marker(**kwargs):
+            kwargs["process_batch"]([])
+            return "task_marker_date_table"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(AITABLE_CLI, "resolve_table", return_value={"tableId": "tbl_resolved"}) as mocked_resolve, \
+                 patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker) as mocked_process:
+                exit_code, payload = self.run_cli([
+                    "process-date-range-with-marker",
+                    "--base-id", "base12345",
+                    "--table-name", "订单表",
+                    "--date-field-id", "fld_date",
+                    "--start-date", "2026-06-01",
+                    "--end-date", "2026-06-01",
+                    "--output-dir", tmp_dir,
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked_resolve.assert_called_once_with(base_id="base12345", table_name="订单表")
+        _, kwargs = mocked_process.call_args
+        self.assertEqual(kwargs["table_id"], "tbl_resolved")
+
+    def test_process_date_range_with_marker_prefers_table_id_over_table_name(self):
+        def fake_process_records_with_marker(**kwargs):
+            kwargs["process_batch"]([])
+            return "task_marker_date_table_id"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.object(AITABLE_CLI, "resolve_table") as mocked_resolve, \
+                 patch.object(AITABLE_CLI, "process_records_with_marker", side_effect=fake_process_records_with_marker) as mocked_process:
+                exit_code, payload = self.run_cli([
+                    "process-date-range-with-marker",
+                    "--base-id", "base12345",
+                    "--table-id", "table12345",
+                    "--table-name", "订单表",
+                    "--date-field-id", "fld_date",
+                    "--start-date", "2026-06-01",
+                    "--end-date", "2026-06-01",
+                    "--output-dir", tmp_dir,
+                ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked_resolve.assert_not_called()
+        _, kwargs = mocked_process.call_args
+        self.assertEqual(kwargs["table_id"], "table12345")
+
+    def test_process_date_range_with_marker_requires_table_id_or_table_name(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            exit_code, payload = self.run_cli([
+                "process-date-range-with-marker",
+                "--base-id", "base12345",
+                "--date-field-id", "fld_date",
+                "--start-date", "2026-06-01",
+                "--end-date", "2026-06-01",
+                "--output-dir", tmp_dir,
+            ])
+
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["type"], "CliError")
+        self.assertIn("必须提供 --table-id 或 --table-name", payload["error"]["message"])
 
     def test_process_records_delete_does_not_use_marker_update(self):
         batches = [

@@ -101,7 +101,7 @@ python scripts/aitable.py query-records --field-name 日期 --field-name SKU ...
 }
 ```
 
-- 只在“触发了自动排除”的时候才出现；显式传 `--field-id` 或传了 `--include-heavy-fields` 时不会出现
+- 只在“触发了自动排除”的时候才出现；显式使用以下任一参数时不会出现：`--field-id` / `--field-name` / `--include-heavy-fields`
 - 只看这个字段就能知道“哪些字段被默认跳过”，不用去猜
 
 ## 命令选择

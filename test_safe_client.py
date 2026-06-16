@@ -17,6 +17,7 @@ from dingtalk_ai_table import (
     safe_query_records,
     safe_update_records,
 )
+from dingtalk_ai_table.client import TruncatedResponseError
 from dingtalk_ai_table.filters import and_filter, build_leaf_filter, contain_filter, date_eq_filter, eq_filter, iter_date_values, ne_filter, or_filter
 from dingtalk_ai_table.guards import (
     QUERY_MARK_FIELD_NAME,
@@ -144,6 +145,62 @@ class TestQueryRecords(unittest.TestCase):
         self.assertEqual(payload['limit'], 100)
         self.assertIn('filters', payload)
         self.assertEqual(payload['fieldIds'], ['fld123456'])
+
+    def test_truncated_first_100_second_100_succeeds_without_warning(self):
+        truncated = TruncatedResponseError('truncated')
+        with patch('dingtalk_ai_table.records.run_mcporter', side_effect=[
+            truncated,
+            {'records': [{'recordId': 'rec_1'}]},
+        ]) as mocked_run:
+            result = query_records('base12345', 'table12345', limit=100)
+
+        self.assertNotIn('warning', result)
+        limits = [json.loads(call.args[0][2])['limit'] for call in mocked_run.call_args_list]
+        self.assertEqual(limits, [100, 100])
+
+    def test_truncated_100_100_then_50_succeeds_with_warning(self):
+        truncated = TruncatedResponseError('truncated')
+        with patch('dingtalk_ai_table.records.run_mcporter', side_effect=[
+            truncated,
+            truncated,
+            {'records': [{'recordId': 'rec_1'}]},
+        ]) as mocked_run:
+            result = query_records('base12345', 'table12345', limit=100)
+
+        self.assertEqual(
+            result['warning'],
+            '原 limit=100 的响应过大被截断，已自动降级为 limit=50。结果不是完整的 100 条。',
+        )
+        limits = [json.loads(call.args[0][2])['limit'] for call in mocked_run.call_args_list]
+        self.assertEqual(limits, [100, 100, 50])
+
+    def test_truncated_100_100_50_then_20_succeeds_with_warning(self):
+        truncated = TruncatedResponseError('truncated')
+        with patch('dingtalk_ai_table.records.run_mcporter', side_effect=[
+            truncated,
+            truncated,
+            truncated,
+            {'records': [{'recordId': 'rec_1'}]},
+        ]) as mocked_run:
+            result = query_records('base12345', 'table12345', limit=100)
+
+        self.assertEqual(
+            result['warning'],
+            '原 limit=100 的响应过大被截断，已自动降级为 limit=20。结果不是完整的 100 条。',
+        )
+        limits = [json.loads(call.args[0][2])['limit'] for call in mocked_run.call_args_list]
+        self.assertEqual(limits, [100, 100, 50, 20])
+
+    def test_truncated_all_attempts_returns_clear_error(self):
+        truncated = TruncatedResponseError('truncated')
+        with patch('dingtalk_ai_table.records.run_mcporter', side_effect=[
+            truncated,
+            truncated,
+            truncated,
+            truncated,
+        ]):
+            with self.assertRaisesRegex(RuntimeError, '响应过大被截断.*limit='):
+                query_records('base12345', 'table12345', limit=100)
 
 
 class TestQueryFilterNormalization(unittest.TestCase):

@@ -131,6 +131,27 @@ def append_jsonl_records(file_obj: TextIO, records: List[Dict[str, Any]]) -> Non
         file_obj.write("\n")
 
 
+def load_existing_record_ids(output_path: Path) -> set:
+    record_ids = set()
+    if not output_path.exists():
+        return record_ids
+
+    with output_path.open("r", encoding="utf-8") as file_obj:
+        for line in file_obj:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict):
+                record_id = record.get("recordId") or record.get("id")
+                if record_id:
+                    record_ids.add(record_id)
+    return record_ids
+
+
 def build_preview(records: List[Dict[str, Any]], preview: int) -> List[Dict[str, Any]]:
     preview = max(0, preview)
     return records[:preview]
@@ -303,7 +324,7 @@ def resolve_table_id_from_args(args: argparse.Namespace, data: Dict[str, Any], b
     table_name = pick_scalar(getattr(args, "table_name", None), data, "tableName", "table_name")
     if table_name:
         return resolve_table(base_id=base_id, table_name=table_name)["tableId"]
-    raise CliError("tableId 不能为空")
+    raise CliError("必须提供 --table-id 或 --table-name")
 
 
 def resolve_field_names(base_id: str, table_id: str, field_names: Any) -> List[str]:
@@ -398,6 +419,12 @@ def resolve_default_field_ids(
         return user_field_ids, []
     light, excluded = fetch_light_field_ids(base_id, table_id)
     return light, excluded
+
+
+def wrap_marker_write_error(exc: Exception) -> CliError:
+    return CliError(
+        f"{exc}；本批可能已处理但标记失败，下次依赖 recordId 去重避免重复导出"
+    )
 
 
 def _is_include_heavy_fields_set(args: argparse.Namespace, data: Dict[str, Any]) -> bool:
@@ -510,19 +537,35 @@ def build_marker_process_summary(
     table_id: str,
     preview: int,
     output_file: TextIO,
+    exported_record_ids: Optional[set] = None,
     update_cells: Optional[Dict[str, Any]] = None,
 ) -> Any:
+    exported_record_ids = exported_record_ids or set()
     summary = {
         "action": action,
         "batchCount": 0,
         "recordCount": 0,
+        "processedCount": 0,
+        "exportedCount": 0,
+        "skippedDuplicateCount": 0,
         "preview": [],
     }
 
     def process_batch(batch: List[Dict[str, Any]]) -> None:
         summary["batchCount"] += 1
         summary["recordCount"] += len(batch)
-        append_jsonl_records(output_file, batch)
+        summary["processedCount"] += len(batch)
+        export_records = []
+        for record in batch:
+            record_id = extract_record_id(record)
+            record["recordId"] = record_id
+            if action == "export-with-marker" and record_id in exported_record_ids:
+                summary["skippedDuplicateCount"] += 1
+                continue
+            export_records.append(record)
+            exported_record_ids.add(record_id)
+        append_jsonl_records(output_file, export_records)
+        summary["exportedCount"] += len(export_records)
 
         if len(summary["preview"]) < preview:
             remaining = preview - len(summary["preview"])
@@ -586,7 +629,7 @@ def delete_records_until_empty(
 def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
     data = ensure_dict_input(load_input_data(args.input))
     base_id = require_value(pick_scalar(args.base_id, data, "baseId", "base_id"), "baseId")
-    table_id = require_value(pick_scalar(args.table_id, data, "tableId", "table_id"), "tableId")
+    table_id = resolve_table_id_from_args(args, data, base_id)
     filters = args.filters_json
     if filters is None:
         filters = data.get("filter") or data.get("filters")
@@ -618,7 +661,9 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
         raise CliError("process-records-with-marker 仅适用于带 filters 的场景；无过滤条件不要使用")
 
     resolved_output_path = resolve_output_path(output_path)
-    with resolved_output_path.open("w", encoding="utf-8") as output_file:
+    existing_record_ids = load_existing_record_ids(resolved_output_path) if action == "export-with-marker" else set()
+    open_mode = "a" if action == "export-with-marker" else "w"
+    with resolved_output_path.open(open_mode, encoding="utf-8") as output_file:
         if action == "delete":
             summary = delete_records_until_empty(
                 base_id=base_id,
@@ -644,19 +689,25 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
             table_id=table_id,
             preview=preview,
             output_file=output_file,
+            exported_record_ids=existing_record_ids,
             update_cells=update_cells,
         )
-        task_marker = process_records_with_marker(
-            base_id=base_id,
-            table_id=table_id,
-            process_batch=process_batch,
-            filters=filters,
-            sort=sort,
-            field_ids=field_ids,
-            keyword=pick_scalar(args.keyword, data, "keyword"),
-            task_name=pick_scalar(args.task_name, data, "taskName", "task_name", default="batch_task"),
-            readonly=pick_scalar(None, data, "readonly", default=False),
-        )
+        try:
+            task_marker = process_records_with_marker(
+                base_id=base_id,
+                table_id=table_id,
+                process_batch=process_batch,
+                filters=filters,
+                sort=sort,
+                field_ids=field_ids,
+                keyword=pick_scalar(args.keyword, data, "keyword"),
+                task_name=pick_scalar(args.task_name, data, "taskName", "task_name", default="batch_task"),
+                readonly=pick_scalar(None, data, "readonly", default=False),
+            )
+        except Exception as exc:
+            if action == "export-with-marker":
+                raise wrap_marker_write_error(exc) from exc
+            raise
     payload = {
         "taskMarker": task_marker,
         "output": str(resolved_output_path),
@@ -670,7 +721,7 @@ def handle_process_records_with_marker(args: argparse.Namespace) -> Any:
 def handle_process_date_range_with_marker(args: argparse.Namespace) -> Any:
     data = ensure_dict_input(load_input_data(args.input))
     base_id = require_value(pick_scalar(args.base_id, data, "baseId", "base_id"), "baseId")
-    table_id = require_value(pick_scalar(args.table_id, data, "tableId", "table_id"), "tableId")
+    table_id = resolve_table_id_from_args(args, data, base_id)
     date_field_id = require_value(
         pick_scalar(args.date_field_id, data, "dateFieldId", "date_field_id"),
         "dateFieldId",
@@ -719,7 +770,9 @@ def handle_process_date_range_with_marker(args: argparse.Namespace) -> Any:
         day_filter = date_eq_filter(date_field_id, date_value)
         current_filters = and_filter(filters, day_filter) if filters is not None else day_filter
         day_output_path = resolve_output_path(str(resolved_output_dir / f"{date_value}.jsonl"))
-        with day_output_path.open("w", encoding="utf-8") as output_file:
+        existing_record_ids = load_existing_record_ids(day_output_path) if action == "export-with-marker" else set()
+        open_mode = "a" if action == "export-with-marker" else "w"
+        with day_output_path.open(open_mode, encoding="utf-8") as output_file:
             if action == "delete":
                 day_summary = delete_records_until_empty(
                     base_id=base_id,
@@ -739,19 +792,25 @@ def handle_process_date_range_with_marker(args: argparse.Namespace) -> Any:
                     table_id=table_id,
                     preview=preview,
                     output_file=output_file,
+                    exported_record_ids=existing_record_ids,
                     update_cells=update_cells,
                 )
-                task_marker = process_records_with_marker(
-                    base_id=base_id,
-                    table_id=table_id,
-                    process_batch=process_batch,
-                    filters=current_filters,
-                    sort=sort,
-                    field_ids=field_ids,
-                    keyword=keyword,
-                    task_name=f"{task_name}_{date_value}",
-                    readonly=readonly,
-                )
+                try:
+                    task_marker = process_records_with_marker(
+                        base_id=base_id,
+                        table_id=table_id,
+                        process_batch=process_batch,
+                        filters=current_filters,
+                        sort=sort,
+                        field_ids=field_ids,
+                        keyword=keyword,
+                        task_name=f"{task_name}_{date_value}",
+                        readonly=readonly,
+                    )
+                except Exception as exc:
+                    if action == "export-with-marker":
+                        raise wrap_marker_write_error(exc) from exc
+                    raise
         total_summary["dayCount"] += 1
         total_summary["batchCount"] += day_summary["batchCount"]
         total_summary["recordCount"] += day_summary["recordCount"]
@@ -1021,6 +1080,7 @@ def build_parser() -> JsonArgumentParser:
     )
     add_common_input_argument(process_records_parser)
     add_base_table_arguments(process_records_parser)
+    process_records_parser.add_argument("--table-name", help="表名，未传 --table-id 时自动解析 tableId")
     add_process_arguments(process_records_parser)
     process_records_parser.add_argument("--output")
     process_records_parser.set_defaults(handler=handle_process_records_with_marker)
@@ -1033,6 +1093,7 @@ def build_parser() -> JsonArgumentParser:
     )
     add_common_input_argument(process_date_range_parser)
     add_base_table_arguments(process_date_range_parser)
+    process_date_range_parser.add_argument("--table-name", help="表名，未传 --table-id 时自动解析 tableId")
     process_date_range_parser.add_argument("--date-field-id")
     process_date_range_parser.add_argument("--start-date")
     process_date_range_parser.add_argument("--end-date")
