@@ -219,6 +219,22 @@ class TestCli(unittest.TestCase):
         self.assertNotIn("records", payload["result"])
         self.assertEqual(len(lines), 4)
 
+    def test_query_records_passes_warning_to_summary(self):
+        mock_result = {
+            "records": [{"recordId": "rec_1", "cells": {"fld_1": "a"}}],
+            "warning": "原 limit=100 的响应过大被截断，已自动降级为 limit=50。结果不是完整的 100 条。",
+        }
+        with patch.object(AITABLE_CLI, "safe_query_records", return_value=mock_result):
+            exit_code, payload = self.run_cli([
+                "query-records",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["warning"], mock_result["warning"])
+
     def test_parse_json_value_handles_non_string_values(self):
         cases = [
             (123, 123),

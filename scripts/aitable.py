@@ -480,6 +480,8 @@ def handle_query_records(args: argparse.Namespace) -> Any:
     if sort is not None:
         summary["sort"] = sort
     if isinstance(result, dict):
+        if result.get("warning"):
+            summary["warning"] = result["warning"]
         if "hasMore" in result:
             summary["hasMore"] = result["hasMore"]
         if "nextCursor" in result:
