@@ -256,6 +256,14 @@ def handle_resolve_option(args: argparse.Namespace) -> Any:
     return {"optionId": option_id}
 
 
+def normalize_filter_operator(operator: str) -> str:
+    operator_aliases = {
+        "contains": "contain",
+        "not_contains": "exclusive",
+    }
+    return operator_aliases.get(operator, operator)
+
+
 def build_filter_from_args(args: argparse.Namespace, data: Dict[str, Any]) -> Dict[str, Any]:
     input_filter = data.get("filter") or data.get("filters")
     if input_filter is not None:
@@ -263,11 +271,7 @@ def build_filter_from_args(args: argparse.Namespace, data: Dict[str, Any]) -> Di
         return input_filter
 
     operator = require_value(pick_scalar(args.operator, data, "operator"), "operator")
-    operator_aliases = {
-        "contains": "contain",
-        "not_contains": "exclusive",
-    }
-    operator = operator_aliases.get(operator, operator)
+    operator = normalize_filter_operator(operator)
     leaf_operators = {
         "eq",
         "ne",
@@ -366,6 +370,7 @@ def build_simple_filter_from_query_args(
         return None
 
     operator = require_value(operator, "filterOperator")
+    operator = normalize_filter_operator(operator)
     field_id = require_value(field_id, "filterFieldId")
     if operator == "date_eq":
         return date_eq_filter(field_id, require_value(value, "filterValue"))

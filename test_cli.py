@@ -219,6 +219,44 @@ class TestCli(unittest.TestCase):
         self.assertNotIn("records", payload["result"])
         self.assertEqual(len(lines), 4)
 
+    def test_query_records_filters_json_supports_contain(self):
+        with patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked:
+            exit_code, payload = self.run_cli([
+                "query-records",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+                "--filters-json", '{"operator":"contain","operands":["fld_1","K150B"]}',
+                "--limit", "5",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked.assert_called_once()
+        self.assertEqual(mocked.call_args.kwargs["filters"], {
+            "operator": "contain",
+            "operands": ["fld_1", "K150B"],
+        })
+
+    def test_query_records_simple_filter_accepts_contains_alias(self):
+        with patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked:
+            exit_code, payload = self.run_cli([
+                "query-records",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+                "--filter-field-id", "fld_1",
+                "--filter-operator", "contains",
+                "--filter-value", "K150B",
+                "--limit", "5",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        mocked.assert_called_once()
+        self.assertEqual(mocked.call_args.kwargs["filters"], {
+            "operator": "contain",
+            "operands": ["fld_1", "K150B"],
+        })
+
     def test_query_records_passes_warning_to_summary(self):
         mock_result = {
             "records": [{"recordId": "rec_1", "cells": {"fld_1": "a"}}],
