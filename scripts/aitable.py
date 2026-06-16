@@ -295,11 +295,93 @@ def handle_build_filter(args: argparse.Namespace) -> Any:
     return build_filter_from_args(args, data)
 
 
+def resolve_table_id_from_args(args: argparse.Namespace, data: Dict[str, Any], base_id: str) -> str:
+    table_id = pick_scalar(args.table_id, data, "tableId", "table_id")
+    if table_id:
+        return table_id
+
+    table_name = pick_scalar(getattr(args, "table_name", None), data, "tableName", "table_name")
+    if table_name:
+        return resolve_table(base_id=base_id, table_name=table_name)["tableId"]
+    raise CliError("tableId 不能为空")
+
+
+def resolve_field_names(base_id: str, table_id: str, field_names: Any) -> List[str]:
+    if isinstance(field_names, str):
+        field_names = [field_names]
+    if not isinstance(field_names, list):
+        raise CliError("fieldNames 必须是数组")
+    return [
+        resolve_field_id(base_id=base_id, table_id=table_id, field_name=require_value(name, "fieldName"))
+        for name in field_names
+    ]
+
+
+def pick_query_field_ids(args: argparse.Namespace, data: Dict[str, Any], base_id: str, table_id: str) -> Any:
+    field_ids = pick_list(args.field_id, data, "fieldIds", "field_ids")
+    field_names = pick_list(getattr(args, "field_name", None), data, "fieldNames", "field_names")
+    if not field_names:
+        return field_ids
+    resolved_field_ids = resolve_field_names(base_id, table_id, field_names)
+    if field_ids:
+        return list(field_ids) + resolved_field_ids
+    return resolved_field_ids
+
+
+def build_simple_filter_from_query_args(
+    args: argparse.Namespace,
+    data: Dict[str, Any],
+    base_id: str,
+    table_id: str,
+) -> Optional[Dict[str, Any]]:
+    operator = pick_scalar(getattr(args, "filter_operator", None), data, "filterOperator", "filter_operator")
+    field_id = pick_scalar(getattr(args, "filter_field_id", None), data, "filterFieldId", "filter_field_id")
+    field_name = pick_scalar(getattr(args, "filter_field_name", None), data, "filterFieldName", "filter_field_name")
+    value = pick_scalar(getattr(args, "filter_value", None), data, "filterValue", "filter_value")
+
+    if field_name and not field_id:
+        field_id = resolve_field_id(base_id=base_id, table_id=table_id, field_name=field_name)
+    if not any(item is not None for item in (operator, field_id, field_name, value)):
+        return None
+
+    operator = require_value(operator, "filterOperator")
+    field_id = require_value(field_id, "filterFieldId")
+    if operator == "date_eq":
+        return date_eq_filter(field_id, require_value(value, "filterValue"))
+    if operator in {"exist", "un_exist"}:
+        return build_leaf_filter(operator, field_id)
+    return build_leaf_filter(operator, field_id, parse_json_value(value))
+
+
+def build_simple_sort_from_query_args(
+    args: argparse.Namespace,
+    data: Dict[str, Any],
+    base_id: str,
+    table_id: str,
+) -> Optional[List[Dict[str, Any]]]:
+    field_id = pick_scalar(getattr(args, "sort_field_id", None), data, "sortFieldId", "sort_field_id")
+    field_name = pick_scalar(getattr(args, "sort_field_name", None), data, "sortFieldName", "sort_field_name")
+    direction = pick_scalar(
+        getattr(args, "sort_direction", None),
+        data,
+        "sortDirection",
+        "sort_direction",
+        default="ASC",
+    )
+
+    if field_name and not field_id:
+        field_id = resolve_field_id(base_id=base_id, table_id=table_id, field_name=field_name)
+    if not field_id:
+        return None
+    return [{"fieldId": field_id, "direction": direction}]
+
+
 def resolve_default_field_ids(
     args: argparse.Namespace,
     data: Dict[str, Any],
     base_id: str,
     table_id: str,
+    user_field_ids: Any = None,
 ) -> Tuple[Optional[List[str]], List[Dict[str, Any]]]:
     """Return (field_ids, excluded_fields) for record-reading commands.
 
@@ -310,7 +392,6 @@ def resolve_default_field_ids(
     3. 否则：调 fetch_light_field_ids() 拉 schema、踢掉重字段。
     fetch_light_field_ids() 在拿不到 schema 时会主动报错，不再静默回退。
     """
-    user_field_ids = pick_list(args.field_id, data, "fieldIds", "field_ids")
     if user_field_ids:
         return user_field_ids, []
     if _is_include_heavy_fields_set(args, data):
@@ -333,16 +414,21 @@ def _is_include_heavy_fields_set(args: argparse.Namespace, data: Dict[str, Any])
 def handle_query_records(args: argparse.Namespace) -> Any:
     data = ensure_dict_input(load_input_data(args.input))
     base_id = require_value(pick_scalar(args.base_id, data, "baseId", "base_id"), "baseId")
-    table_id = require_value(pick_scalar(args.table_id, data, "tableId", "table_id"), "tableId")
+    table_id = resolve_table_id_from_args(args, data, base_id)
     filters = args.filters_json
     if filters is None:
         filters = data.get("filter") or data.get("filters")
     if isinstance(filters, str):
         filters = parse_json_text(filters, "--filters-json")
+    if filters is None:
+        filters = build_simple_filter_from_query_args(args, data, base_id, table_id)
     sort = pick_scalar(args.sort_json, data, "sort")
     if isinstance(sort, str):
         sort = parse_json_text(sort, "--sort-json")
-    field_ids, excluded_fields = resolve_default_field_ids(args, data, base_id, table_id)
+    if sort is None:
+        sort = build_simple_sort_from_query_args(args, data, base_id, table_id)
+    field_ids = pick_query_field_ids(args, data, base_id, table_id)
+    field_ids, excluded_fields = resolve_default_field_ids(args, data, base_id, table_id, field_ids)
 
     result = safe_query_records(
         base_id=base_id,
@@ -362,6 +448,10 @@ def handle_query_records(args: argparse.Namespace) -> Any:
         "total": len(records),
         "preview": build_preview(records, preview),
     }
+    if isinstance(filters, dict):
+        summary["filter"] = filters
+    if sort is not None:
+        summary["sort"] = sort
     if isinstance(result, dict):
         if "hasMore" in result:
             summary["hasMore"] = result["hasMore"]
@@ -708,9 +798,17 @@ def add_base_table_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def add_query_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--filters-json", help="filters JSON 字符串")
-    parser.add_argument("--sort-json", help="sort JSON 字符串")
+    parser.add_argument("--filters-json", help="高级用法：filters JSON 字符串")
+    parser.add_argument("--sort-json", help="高级用法：sort JSON 字符串；不要和 --cursor 混用")
     parser.add_argument("--field-id", action="append", default=None)
+    parser.add_argument("--field-name", action="append", default=None, help="按字段名选择返回字段，可重复")
+    parser.add_argument("--filter-field-id", help="简单筛选字段 ID")
+    parser.add_argument("--filter-field-name", help="简单筛选字段名，CLI 会自动解析 fieldId")
+    parser.add_argument("--filter-operator", help="简单筛选操作符，如 eq/contain/date_eq/exist")
+    parser.add_argument("--filter-value", help="简单筛选值；JSON 字符串会自动解析")
+    parser.add_argument("--sort-field-id", help="排序字段 ID；sort + cursor 不稳定，不要混用")
+    parser.add_argument("--sort-field-name", help="排序字段名，CLI 会自动解析 fieldId；sort + cursor 不稳定，不要混用")
+    parser.add_argument("--sort-direction", choices=["ASC", "DESC"], default=None)
     parser.add_argument("--keyword")
     parser.add_argument("--preview", type=int, default=None)
     parser.add_argument(
@@ -868,12 +966,13 @@ def build_parser() -> JsonArgumentParser:
 
     query_records_parser = subparsers.add_parser(
         "query-records",
-        help="查询记录（单次最多100条；filters/sort 场景禁用 cursor）",
+        help="查询记录（单次最多100条；filters+cursor 允许，sort+cursor 禁用）",
         description="Query records and optionally write the full result to JSONL.",
         formatter_class=HelpFormatter,
     )
     add_common_input_argument(query_records_parser)
     add_base_table_arguments(query_records_parser)
+    query_records_parser.add_argument("--table-name", help="表名，未传 --table-id 时自动解析 tableId")
     query_records_parser.add_argument("--record-id", action="append", default=None)
     query_records_parser.add_argument("--limit", type=int)
     query_records_parser.add_argument("--cursor")

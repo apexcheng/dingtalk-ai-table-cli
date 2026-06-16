@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 from typing import Any, Dict, List, Optional
 
@@ -48,7 +49,8 @@ def build_mcporter_env() -> Dict[str, str]:
 
 
 def build_mcporter_call(args: List[str]) -> List[str]:
-    return ['mcporter', 'call', MCP_SERVER_NAME] + args
+    mcporter_bin = shutil.which('mcporter') or 'mcporter'
+    return [mcporter_bin, 'call', MCP_SERVER_NAME] + args
 
 
 def run_mcporter(args: List[str], timeout: int = 60) -> Any:

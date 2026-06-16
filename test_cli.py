@@ -75,6 +75,9 @@ class TestCli(unittest.TestCase):
         help_text = AITABLE_CLI.build_parser().format_help()
         self.assertIn("list-bases", help_text)
         self.assertIn("search-bases", help_text)
+        self.assertIn("filters+cursor 允许", help_text)
+        self.assertIn("sort+cursor 禁用", help_text)
+        self.assertNotIn("filters/sort 场景禁用 cursor", help_text)
 
     def test_list_bases_passes_limit_and_cursor(self):
         with patch.object(AITABLE_CLI, "list_bases", return_value={"bases": []}) as mocked:
@@ -684,6 +687,61 @@ class TestCli(unittest.TestCase):
         mocked.assert_called_once()
         _, kwargs = mocked.call_args
         self.assertEqual(kwargs["filters"], cli_filter)
+
+    def test_query_records_resolves_table_and_field_names(self):
+        with patch.object(AITABLE_CLI, "resolve_table", return_value={"tableId": "tbl_resolved"}), \
+                patch.object(AITABLE_CLI, "resolve_field_id", side_effect=["fld_a", "fld_b"]), \
+                patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked:
+            exit_code, payload = self.run_cli([
+                "query-records",
+                "--base-id", "base12345",
+                "--table-name", "订单表",
+                "--field-name", "订单号",
+                "--field-name", "状态",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        _, kwargs = mocked.call_args
+        self.assertEqual(kwargs["table_id"], "tbl_resolved")
+        self.assertEqual(kwargs["field_ids"], ["fld_a", "fld_b"])
+
+    def test_query_records_builds_simple_filter_by_field_name(self):
+        with patch.object(AITABLE_CLI, "resolve_field_id", return_value="fld_status"), \
+                patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked:
+            exit_code, payload = self.run_cli([
+                "query-records",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+                "--filter-field-name", "状态",
+                "--filter-operator", "eq",
+                "--filter-value", "进行中",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        expected_filter = {"operator": "eq", "operands": ["fld_status", "进行中"]}
+        _, kwargs = mocked.call_args
+        self.assertEqual(kwargs["filters"], expected_filter)
+        self.assertEqual(payload["result"]["filter"], expected_filter)
+
+    def test_query_records_builds_simple_sort_by_field_name(self):
+        with patch.object(AITABLE_CLI, "resolve_field_id", return_value="fld_created"), \
+                patch.object(AITABLE_CLI, "safe_query_records", return_value={"records": []}) as mocked:
+            exit_code, payload = self.run_cli([
+                "query-records",
+                "--base-id", "base12345",
+                "--table-id", "table12345",
+                "--sort-field-name", "创建时间",
+                "--sort-direction", "DESC",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["ok"])
+        expected_sort = [{"fieldId": "fld_created", "direction": "DESC"}]
+        _, kwargs = mocked.call_args
+        self.assertEqual(kwargs["sort"], expected_sort)
+        self.assertEqual(payload["result"]["sort"], expected_sort)
 
     def test_process_records_with_marker_input_filter_singular_is_passed_as_filters(self):
         filter_obj = {"operator": "eq", "operands": ["fld_1", "a"]}

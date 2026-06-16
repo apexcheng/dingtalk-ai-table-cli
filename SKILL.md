@@ -42,10 +42,10 @@ python scripts/aitable.py <subcommand> ...
 - 用户问“有多少条 / 统计数量 / count”时，如果结果可能超过 `100`，不能直接用 `query-records` 的 `total`
 - 如果不知道 `baseId`，先用 `list-bases` 或 `search-bases`
 - `filters + cursor` 允许
-- `sort + cursor` 暂不允许
+- `sort + cursor` 不稳定，继续禁止
 - 大批量只读查询可以用 `query-records + cursor` 分页
 - 会修改数据集的批处理仍优先用 `process-records-with-marker` / `process-date-range-with-marker`
-- `process-records-with-marker` / `process-date-range-with-marker` 都不支持 `sort`（marker 回写会改结果集，排序分页会造成重复和漏数据，只接受 `filters`）
+- `process-records-with-marker` / `process-date-range-with-marker` 都不支持 `sort`（marker 回写会改结果集，排序分页会造成重复和漏数据）
 - `process-records-with-marker` 推荐动作名是 `export-with-marker`
 - `process-records-with-marker` 的 `delete` 不写查询标记
 - `update-records` 当前不支持用来清空字段
@@ -77,17 +77,17 @@ python scripts/aitable.py query-records --include-heavy-fields ...
 `--include-heavy-fields` 适用于 `query-records` / `process-records-with-marker` /
 `process-date-range-with-marker` 三个命令。
 
-### 最佳实践：显式传 `--field-id`
+### 最佳实践：优先传字段名
 
 大批量统计 / 导出时，**优先显式指定只需要的字段**：
 
 ```bash
-python scripts/aitable.py query-records --field-id fld_date --field-id fld_sku ...
+python scripts/aitable.py query-records --field-name 日期 --field-name SKU ...
 ```
 
 只读必要字段，体积最小、最稳定，避开 pipe buffer 和上下文问题。
-一旦显式传了 `--field-id`，**不再自动排除重字段**——用户表达“我只要这些”，就以用户为准。
-如果手上只有字段名（如 `日期` / `SKU`），先用 `resolve-field` 拿到对应的 `fieldId` 再传进来。
+一旦显式传了 `--field-name` 或 `--field-id`，**不再自动排除重字段**——用户表达“我只要这些”，就以用户为准。
+如果手上只有字段名（如 `日期` / `SKU`），`query-records` 可直接用 `--field-name`，不用先手动 `resolve-field`。
 
 ### excludedFields 返回字段
 
@@ -121,7 +121,8 @@ python scripts/aitable.py query-records --field-id fld_date --field-id fld_sku .
 | 根据单选 / 多选名称获取选项 ID | `resolve-option` |
 | 构造筛选条件 | `build-filter` |
 | 读取少量数据，单次最多 100 条 | `query-records` |
-| 读取带 `filters` / `sort` 的大量数据 | `process-records-with-marker` |
+| 读取带 `filters` 的大量数据 | `query-records + cursor` 或 `process-records-with-marker` |
+| 读取带 `sort` 的大量数据 | 不要用 cursor；必要时人工拆分条件 |
 | 按日期范围批量处理数据 | `process-date-range-with-marker` |
 | 新增记录 | `create-records` |
 | 修改记录 | `update-records` |
@@ -136,18 +137,18 @@ python scripts/aitable.py query-records --field-id fld_date --field-id fld_sku .
 - `get-tables` 不是列出所有表
 - `get-tables` 只适用于已知 `tableId` 后查询表结构
 - `get-fields` 只适用于已知 `fieldId` 后查看字段配置
-- 如果只知道字段名，先使用 `resolve-field`
-- 如果只知道表名，应先使用 `resolve-table`
+- 如果只知道字段名，`query-records` 优先使用 `--field-name` / `--filter-field-name` / `--sort-field-name`
+- 如果只知道表名，`query-records` 可以直接传 `--table-name`
 - 如果想查看表结构，先用 `resolve-table`，再用 `get-tables`
 - 如果已经知道 `baseId`，不需要先用 `list-bases` / `search-bases`
 
 推荐流程：
 
 ```text
-search-bases / list-bases -> get-base -> resolve-table -> resolve-field -> build-filter -> query/process
+search-bases / list-bases -> get-base -> query-records --table-name/--field-name/--filter-field-name
 ```
 
-`build-filter` 支持原生筛选符：`eq` / `ne` / `exist` / `un_exist` / `lt` / `gt` /
+复杂筛选再使用 `build-filter`。`build-filter` 支持原生筛选符：`eq` / `ne` / `exist` / `un_exist` / `lt` / `gt` /
 `lte` / `gte` / `contain` / `exclusive` / `all_of` / `any_of` / `none_of` /
 `date_eq` / `before` / `after` / `not_before` / `not_after` / `from_now` /
 `date_between`。
@@ -183,6 +184,7 @@ python scripts/aitable.py resolve-field --base-id xxx --table-id xxx --field-nam
 python scripts/aitable.py resolve-option --base-id xxx --table-id xxx --field-name 状态 --option-name 进行中
 python scripts/aitable.py build-filter --operator eq --field-id fld_xxx --value 进行中
 python scripts/aitable.py build-filter --operator contain --field-id fld_xxx --value keyword
+python scripts/aitable.py query-records --base-id xxx --table-name 评价收集表 --field-name 日期 --filter-field-name 状态 --filter-operator eq --filter-value 进行中
 python scripts/aitable.py query-records --input examples/query_records.json
 python scripts/aitable.py create-records --input examples/create_records.json
 python scripts/aitable.py update-records --input examples/update_records.json
