@@ -291,6 +291,16 @@ class TestQueryMarker(unittest.TestCase):
                 readonly=True,
             )
 
+    def test_query_with_marker_sort_rejected(self):
+        with self.assertRaisesRegex(ValueError, '不支持 sort'):
+            query_with_marker(
+                base_id='base12345',
+                table_id='table12345',
+                process_batch=lambda batch: batch,
+                filters=eq_filter('fld123456', 'in progress'),
+                sort=[{'fieldId': 'fld_sort', 'direction': 'ASC'}],
+            )
+
     def test_query_date_range_with_marker_splits_by_day(self):
         with patch('dingtalk_ai_table.markers.query_with_marker', side_effect=['task_day_1', 'task_day_2']) as mocked_query:
             result = query_date_range_with_marker(
@@ -354,6 +364,33 @@ class TestQueryMarker(unittest.TestCase):
         self.assertIn('漏数据', message)
         # 只可重试一次 fallback，不能再重试就崩。
         self.assertEqual(mocked_update.call_count, 0)
+
+    def test_query_with_marker_repairs_missing_verified_records_one_by_one(self):
+        batch_record_1 = {'recordId': 'rec12345', 'cells': {}}
+        batch_record_2 = {'recordId': 'rec67890', 'cells': {}}
+
+        with patch('dingtalk_ai_table.markers.ensure_query_mark_field', return_value='fld_mark_xx'), \
+             patch('dingtalk_ai_table.markers.query_records', side_effect=[
+                 {'records': [batch_record_1, batch_record_2]},
+                 {'records': [{'recordId': 'rec12345', 'cells': {}}]},
+                 {'records': [{'recordId': 'rec67890', 'cells': {}}]},
+                 {'records': []},
+             ]), \
+             patch('dingtalk_ai_table.markers.update_records') as mocked_update:
+            marker = query_with_marker(
+                base_id='base12345',
+                table_id='table12345',
+                process_batch=lambda batch: batch,
+                filters=eq_filter('fld123456', 'in progress'),
+                task_name='export_orders',
+            )
+
+        self.assertTrue(marker.startswith('task_'))
+        self.assertEqual(mocked_update.call_count, 2)
+        first_call = mocked_update.call_args_list[0].args[2]
+        second_call = mocked_update.call_args_list[1].args[2]
+        self.assertEqual([item['recordId'] for item in first_call], ['rec12345'])
+        self.assertEqual([item['recordId'] for item in second_call], ['rec67890'])
 
 
 if __name__ == '__main__':
